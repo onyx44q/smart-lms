@@ -80,7 +80,36 @@ function getStudentData($conn, $user_id) {
     $weakest    = !empty($mastery) ? array_key_last($mastery) : null;
     $strongest  = !empty($mastery) ? array_key_first($mastery) : null;
 
-    return compact('s','courses','mastery','last_res','notifications','schedules','avgMastery','weakest','strongest');
+    // ── Assignments (pending vs submitted) ──────────────────────────────
+    $assign_pending   = [];
+    $assign_submitted = [];
+    if (!empty($cids)) {
+        $ids_a = implode(',', $cids);
+        $asgn_res = mysqli_query($conn,
+            "SELECT a.id, a.title, a.due_date, c.title AS course_title,
+                    s.id AS submission_id,
+                    pr.verdict, pr.overall_score
+             FROM assignments a
+             JOIN courses c ON c.id = a.course_id
+             LEFT JOIN assignment_submissions s
+                   ON s.assignment_id = a.id AND s.student_id = $user_id
+             LEFT JOIN plagiarism_reports pr ON pr.submission_id = s.id
+             WHERE a.course_id IN ($ids_a)
+             ORDER BY a.due_date ASC"
+        );
+        if ($asgn_res) {
+            while ($r = mysqli_fetch_assoc($asgn_res)) {
+                if ($r['submission_id']) {
+                    $assign_submitted[] = $r;
+                } else {
+                    $assign_pending[] = $r;
+                }
+            }
+        }
+    }
+
+    return compact('s','courses','mastery','last_res','notifications','schedules',
+                   'avgMastery','weakest','strongest','assign_pending','assign_submitted');
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -289,6 +318,34 @@ if ($role === 'student') {
         }
     }
 
+    // ── Assignments ──
+    elseif (contains($msg, ['assignment','homework','task','due date','deadline','submit','submission','plagiarism report'])) {
+        $pending = count($d['assign_pending']);
+        $done    = count($d['assign_submitted']);
+        $total   = $pending + $done;
+
+        if ($total === 0) {
+            $reply = "No assignments have been posted yet, $name. Your lecturers will post assignments here — you'll get a notification when one is published.";
+        } elseif ($pending > 0) {
+            $reply = "You have $pending pending assignment(s) still to submit:\n";
+            foreach ($d['assign_pending'] as $a) {
+                $due     = !empty($a['due_date']) ? 'due ' . date('d M Y', strtotime($a['due_date'])) : 'no due date set';
+                $overdue = !empty($a['due_date']) && strtotime($a['due_date']) < time() ? ' ⚠ OVERDUE' : '';
+                $reply  .= "• {$a['title']} ({$a['course_title']}) — {$due}{$overdue}\n";
+            }
+            $reply .= "\nClick 'Assignments' in the sidebar to submit your work.";
+            if ($done > 0) $reply .= " You have already submitted $done assignment(s).";
+        } else {
+            $reply  = "All $done assignment(s) submitted — great work, $name!\n";
+            $risky  = array_filter($d['assign_submitted'], fn($a) => ($a['verdict'] ?? '') === 'HIGH RISK');
+            if (!empty($risky)) {
+                $reply .= "\n⚠ " . count($risky) . " submission(s) flagged HIGH RISK for plagiarism. Visit the Assignments tab to review and consider resubmitting with original work.";
+            } else {
+                $reply .= "Your plagiarism reports are all clear. Check the Assignments tab for full results.";
+            }
+        }
+    }
+
     // ── Default ──
     else {
         $topics = [
@@ -296,6 +353,7 @@ if ($role === 'student') {
             'my mastery' => 'see your skill levels',
             'my courses' => 'see enrolled courses',
             'quiz help' => 'learn how to take a quiz',
+            'assignment' => 'see pending assignments and reports',
             'my schedule' => 'see upcoming sessions',
             'career advice' => 'get career guidance',
             'improve' => 'get study tips',

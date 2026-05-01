@@ -441,13 +441,33 @@ function getLecturerDecisionData(int $lecturer_id, $conn): array
 //  EMAIL SENDER (PHPMailer-free version using PHP mail())
 //  For production, replace mail() with PHPMailer + SMTP.
 // ─────────────────────────────────────────────────────────────────────
+
+// ... previous code (getLecturerDecisionData, etc.)
+
+// ─────────────────────────────────────────────────────────────────────
+//  EMAIL SENDER (Updated with SMTP settings)
+// ─────────────────────────────────────────────────────────────────────
 function sendLmsEmail(string $to, string $subject, string $body): bool
 {
+    // Force SMTP settings for XAMPP
+    ini_set("SMTP", "smtp.gmail.com"); 
+    ini_set("smtp_port", "587");
+    ini_set("sendmail_from", "noreply@smartlms.local");
+
     $headers  = "From: noreply@smartlms.local\r\n";
     $headers .= "Reply-To: noreply@smartlms.local\r\n";
     $headers .= "Content-Type: text/plain; charset=UTF-8\r\n";
     $headers .= "X-Mailer: SmartLMS-PHP\r\n";
 
-    return mail($to, $subject, $body, $headers);
+    // The @ suppresses the warning if the connection still fails
+    return @mail($to, $subject, $body, $headers);
 }
+?>
+
+
+
+
+
+
+
 ?>
