@@ -34,9 +34,10 @@ if ($quiz_id === 0) {
 }
 
 $quiz = mysqli_fetch_assoc(mysqli_query($conn,
-    "SELECT q.*, c.title as course_title
+    "SELECT q.*, c.title as course_title, cu.title AS unit_title, cu.unit_code
      FROM quizzes q
      JOIN courses c ON c.id = q.course_id
+     LEFT JOIN course_units cu ON cu.id = q.unit_id
      WHERE q.id = $quiz_id AND q.is_active = 1"
 ));
 
@@ -120,7 +121,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['answers'])) {
         "SELECT full_name, email, career_path FROM users WHERE id = $student_id"
     ));
     $career_path  = $student_row['career_path'] ?? 'General Software Engineering';
-    $skill_name   = $quiz['skill_name'] ?? 'Core Theory';
+    // Resolve skill_name — if NULL (older quizzes), infer from quiz title
+    $skill_name = $quiz['skill_name'];
+    if (empty($skill_name)) {
+        $title_lower = strtolower($quiz['title'] ?? '');
+        if (str_contains($title_lower, 'practical') || str_contains($title_lower, 'lab') || str_contains($title_lower, 'applied')) {
+            $skill_name = 'Practical Application';
+        } elseif (str_contains($title_lower, 'aptitude') || str_contains($title_lower, 'general') || str_contains($title_lower, 'reasoning')) {
+            $skill_name = 'General Aptitude';
+        } elseif (str_contains($title_lower, 'theory') || str_contains($title_lower, 'core') || str_contains($title_lower, 'concept')) {
+            $skill_name = 'Core Theory';
+        } else {
+            // Last resort: rotate across all three skills by quiz_id so results
+            // spread across skills instead of always landing on Core Theory.
+            $skills_pool = ['General Aptitude', 'Practical Application', 'Core Theory'];
+            $skill_name  = $skills_pool[$quiz_id % 3];
+        }
+    }
 
     // Ensure skill exists
     if (!isset($all_mastery[$skill_name])) {

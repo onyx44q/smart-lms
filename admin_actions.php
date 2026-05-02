@@ -49,10 +49,14 @@ if (isset($_GET['delete_user'])) {
 
 if (isset($_GET['delete_course'])) {
     $id = intval($_GET['delete_course']);
-    // Optional: Reset lecturer_id in users if course is deleted
     mysqli_query($conn, "UPDATE users SET course_id = NULL WHERE course_id = $id");
     mysqli_query($conn, "DELETE FROM courses WHERE id = $id");
     header("Location: admin_dashboard.php?view=courses&status=deleted");
     exit;
+}
+
+// ── Course Catalog view: handle units sub-actions ─────────────────
+if ($view == 'courses') {
+    // handled inside admin_dashboard.php or unit_actions.php
 }
 ?>

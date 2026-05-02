@@ -281,11 +281,21 @@ function buildEmailBody(
 //  @param mysqli $conn
 //  @return array
 // ─────────────────────────────────────────────────────────────────────
+/**
+ * Infer skill name for a result row inside getLecturerDecisionData.
+ */
+function _lect_infer_skill(array $row): string {
+    $t = strtolower($row['quiz_title'] ?? '');
+    if (str_contains($t, 'practical') || str_contains($t, 'lab') || str_contains($t, 'applied'))       return 'Practical Application';
+    if (str_contains($t, 'aptitude')  || str_contains($t, 'general') || str_contains($t, 'reasoning')) return 'General Aptitude';
+    if (str_contains($t, 'theory')    || str_contains($t, 'core')    || str_contains($t, 'concept'))    return 'Core Theory';
+    $pool = ['General Aptitude', 'Practical Application', 'Core Theory'];
+    return $pool[intval($row['quiz_id'] ?? 0) % 3];
+}
+
 function getLecturerDecisionData(int $lecturer_id, $conn): array
 {
-    global $CAREER_SKILL_MAP;
-
-    // Lecturer's courses — check both courses.lecturer_id AND users.course_id
+    // Lecturer's courses
     $courses_res = mysqli_query($conn,
         "SELECT DISTINCT id, title FROM courses
          WHERE lecturer_id = $lecturer_id
@@ -299,87 +309,123 @@ function getLecturerDecisionData(int $lecturer_id, $conn): array
         $course_ids[]      = intval($r['id']);
     }
 
-    if (empty($course_ids)) {
-        return [
-            'courses'           => [],
-            'at_risk_students'  => [],
-            'top_students'      => [],
-            'skill_averages'    => [],
-            'class_summary'     => [],
-            'quiz_performance'  => [],
-        ];
-    }
+    $empty = ['courses' => $courses, 'at_risk_students' => [], 'top_students' => [],
+              'skill_averages' => [], 'class_summary' => [], 'class_avg' => 0];
+    if (empty($course_ids)) return $empty;
 
     $ids_str = implode(',', $course_ids);
 
-    // Per-course enrollment count
+    // Enrollment counts per course
     $enroll_res = mysqli_query($conn,
-        "SELECT course_id, COUNT(student_id) as count
-         FROM enrollments WHERE course_id IN ($ids_str)
-         GROUP BY course_id"
+        "SELECT course_id, COUNT(student_id) AS cnt FROM enrollments WHERE course_id IN ($ids_str) GROUP BY course_id"
     );
     $enroll_counts = [];
-    while ($r = mysqli_fetch_assoc($enroll_res)) {
-        $enroll_counts[$r['course_id']] = $r['count'];
-    }
+    while ($r = mysqli_fetch_assoc($enroll_res)) $enroll_counts[$r['course_id']] = intval($r['cnt']);
 
-    // All enrolled students
+    // All enrolled students with their enrolled course
     $students_res = mysqli_query($conn,
-        "SELECT DISTINCT e.student_id, u.full_name, u.career_path
-         FROM enrollments e
-         JOIN users u ON u.id = e.student_id
+        "SELECT DISTINCT e.student_id, e.course_id, u.full_name, u.career_path
+         FROM enrollments e JOIN users u ON u.id = e.student_id
          WHERE e.course_id IN ($ids_str)"
     );
-    $all_students = [];
+    $all_students    = [];
+    $student_courses = [];
     while ($r = mysqli_fetch_assoc($students_res)) {
-        $all_students[$r['student_id']] = $r;
+        $sid = intval($r['student_id']);
+        if (!isset($all_students[$sid])) $all_students[$sid] = $r;
+        $student_courses[$sid][] = intval($r['course_id']);
     }
+    if (empty($all_students)) return $empty;
 
-    // Mastery per student per skill
-    $mastery_res = mysqli_query($conn,
-        "SELECT sm.student_id, sm.skill_name, sm.mastery_level
-         FROM student_mastery sm
-         WHERE sm.student_id IN (" . (empty($all_students) ? '0' : implode(',', array_keys($all_students))) . ")"
+    $student_ids_str = implode(',', array_keys($all_students));
+
+    // ── Compute per-student mastery by replaying RESULTS through AI engine rules ──
+    // This bypasses duplicate rows in student_mastery and correctly accumulates
+    // across multiple quizzes on different topics.
+    $results_res = mysqli_query($conn,
+        "SELECT r.student_id, r.score, r.attempt_no,
+                q.id AS quiz_id, q.skill_name, q.title AS quiz_title, q.course_id
+         FROM results r
+         JOIN quizzes q ON q.id = r.quiz_id
+         WHERE r.student_id IN ($student_ids_str) AND q.course_id IN ($ids_str)
+         ORDER BY r.student_id ASC, r.created_at ASC, r.id ASC"
     );
     $student_mastery = [];
-    while ($r = mysqli_fetch_assoc($mastery_res)) {
-        $student_mastery[$r['student_id']][$r['skill_name']] = floatval($r['mastery_level']);
+    while ($row = mysqli_fetch_assoc($results_res)) {
+        $sid   = intval($row['student_id']);
+        $skill = !empty($row['skill_name']) ? $row['skill_name'] : _lect_infer_skill($row);
+        $cur   = $student_mastery[$sid][$skill] ?? 0.0;
+        $score = floatval($row['score']);
+        $att   = max(1, intval($row['attempt_no'] ?? 1));
+        if ($score >= AI_SCORE_ADVANCE)                                $delta = AI_MASTERY_ADVANCE;
+        elseif ($score >= AI_SCORE_RETRY && $att < AI_MAX_RETRIES)    $delta = AI_MASTERY_RETRY;
+        else                                                           $delta = AI_MASTERY_REMEDIAL;
+        $student_mastery[$sid][$skill] = max(AI_MASTERY_FLOOR, min(AI_MASTERY_CAP, $cur + $delta));
     }
 
-    // Classify each student
+    // ── Fetch final exam / coursework marks for combined scoring ──
+    $exam_res = mysqli_query($conn,
+        "SELECT student_id, course_id, exam_mark, exam_max, coursework_mark, coursework_max
+         FROM student_marks
+         WHERE student_id IN ($student_ids_str) AND course_id IN ($ids_str)"
+    );
+    $student_exam = [];
+    while ($r = mysqli_fetch_assoc($exam_res)) {
+        $sid = intval($r['student_id']);
+        $ep  = floatval($r['exam_max'])       > 0 ? floatval($r['exam_mark'])       / floatval($r['exam_max'])       * 100 : null;
+        $cp  = floatval($r['coursework_max']) > 0 ? floatval($r['coursework_mark']) / floatval($r['coursework_max']) * 100 : null;
+        $comb = null;
+        if ($ep !== null && $cp !== null)  $comb = $ep * 0.7 + $cp * 0.3;
+        elseif ($ep !== null)              $comb = $ep;
+        elseif ($cp !== null)              $comb = $cp;
+        if ($comb !== null) $student_exam[$sid] = round($comb, 1);
+    }
+
+    // ── Classify each student ──
     $at_risk_students = [];
     $top_students     = [];
-    foreach ($all_students as $sid => $student) {
-        $skills = $student_mastery[$sid] ?? [];
-        $avg    = count($skills) > 0 ? array_sum($skills) / count($skills) : 0;
+    $all_combined     = [];
 
-        // Rule: at risk if avg mastery < 40
-        if ($avg < 40) {
+    foreach ($all_students as $sid => $student) {
+        $skills   = $student_mastery[$sid] ?? [];
+        $quiz_avg = count($skills) > 0 ? array_sum($skills) / count($skills) : null;
+        $exam_pct = $student_exam[$sid]    ?? null;
+
+        // Combined: 60% quiz mastery + 40% exam (when both available)
+        if ($quiz_avg !== null && $exam_pct !== null) $combined = round($quiz_avg * 0.6 + $exam_pct * 0.4, 1);
+        elseif ($exam_pct  !== null)                  $combined = $exam_pct;
+        elseif ($quiz_avg  !== null)                  $combined = round($quiz_avg, 1);
+        else continue;  // no data — skip
+
+        $all_combined[] = $combined;
+
+        if ($combined < 40) {
             $at_risk_students[] = [
-                'name'         => $student['full_name'],
-                'career'       => $student['career_path'],
-                'avg_mastery'  => round($avg, 1),
-                'risk_level'   => $avg < 20 ? 'critical' : 'moderate',
+                'name'           => $student['full_name'],
+                'career'         => $student['career_path'] ?? '',
+                'avg_mastery'    => $quiz_avg !== null ? round($quiz_avg, 1) : 0,
+                'combined_score' => $combined,
+                'risk_level'     => $combined < 20 ? 'critical' : 'moderate',
+                'has_exam'       => $exam_pct !== null,
             ];
         }
-
-        // Rule: top performer if avg mastery >= 70
-        if ($avg >= 70) {
+        if ($combined >= 70) {
             $top_students[] = [
-                'name'        => $student['full_name'],
-                'career'      => $student['career_path'],
-                'avg_mastery' => round($avg, 1),
+                'name'           => $student['full_name'],
+                'career'         => $student['career_path'] ?? '',
+                'avg_mastery'    => $quiz_avg !== null ? round($quiz_avg, 1) : 0,
+                'combined_score' => $combined,
+                'has_exam'       => $exam_pct !== null,
             ];
         }
     }
 
-    // Sort
-    usort($at_risk_students, fn($a, $b) => $a['avg_mastery'] <=> $b['avg_mastery']);
-    usort($top_students,     fn($a, $b) => $b['avg_mastery'] <=> $a['avg_mastery']);
+    usort($at_risk_students, fn($a, $b) => $a['combined_score'] <=> $b['combined_score']);
+    usort($top_students,     fn($a, $b) => $b['combined_score'] <=> $a['combined_score']);
 
-    // Skill averages across all enrolled students
-    $skill_totals  = [];
-    $skill_counts  = [];
+    // ── Skill gap analysis ──
+    $skill_totals = [];
+    $skill_counts = [];
     foreach ($student_mastery as $skills) {
         foreach ($skills as $skill => $lvl) {
             $skill_totals[$skill] = ($skill_totals[$skill] ?? 0) + $lvl;
@@ -390,43 +436,41 @@ function getLecturerDecisionData(int $lecturer_id, $conn): array
     foreach ($skill_totals as $skill => $total) {
         $avg = $total / $skill_counts[$skill];
         $skill_averages[] = [
-            'skill'      => $skill,
-            'average'    => round($avg, 1),
-            'status'     => $avg >= 70 ? 'strong' : ($avg >= 40 ? 'developing' : 'weak'),
+            'skill'   => $skill,
+            'average' => round($avg, 1),
+            'status'  => $avg >= 70 ? 'strong' : ($avg >= 40 ? 'developing' : 'weak'),
+            'count'   => $skill_counts[$skill],
         ];
     }
-    usort($skill_averages, fn($a, $b) => $a['average'] <=> $b['average']); // weakest first
+    usort($skill_averages, fn($a, $b) => $a['average'] <=> $b['average']);
 
-    // Per-course summary
+    // ── Per-course summary ──
     $class_summary = [];
     foreach ($courses as $cid => $ctitle) {
-        $enrolled = $enroll_counts[$cid] ?? 0;
-        // Students in this course
-        $course_students_res = mysqli_query($conn,
-            "SELECT e.student_id FROM enrollments e WHERE e.course_id = $cid"
-        );
-        $course_student_ids = [];
-        while ($r = mysqli_fetch_assoc($course_students_res)) {
-            $course_student_ids[] = $r['student_id'];
+        $c_sids = array_keys(array_filter($student_courses, fn($cs) => in_array($cid, $cs)));
+        $q_avgs = [];
+        $e_avgs = [];
+        foreach ($c_sids as $sid) {
+            $skills = $student_mastery[$sid] ?? [];
+            if (!empty($skills)) $q_avgs[] = array_sum($skills) / count($skills);
+            if (isset($student_exam[$sid]))  $e_avgs[] = $student_exam[$sid];
         }
-
-        $course_avg = 0;
-        if (!empty($course_student_ids)) {
-            $ids_s = implode(',', $course_student_ids);
-            $r2 = mysqli_fetch_assoc(mysqli_query($conn,
-                "SELECT AVG(mastery_level) as avg_m FROM student_mastery WHERE student_id IN ($ids_s)"
-            ));
-            $course_avg = round(floatval($r2['avg_m'] ?? 0), 1);
-        }
+        $q_avg = !empty($q_avgs) ? round(array_sum($q_avgs) / count($q_avgs), 1) : 0;
+        $e_avg = !empty($e_avgs) ? round(array_sum($e_avgs) / count($e_avgs), 1) : null;
+        $c_avg = $e_avg !== null ? round($q_avg * 0.6 + $e_avg * 0.4, 1) : $q_avg;
 
         $class_summary[] = [
-            'course_id'   => $cid,
-            'title'       => $ctitle,
-            'enrolled'    => $enrolled,
-            'avg_mastery' => $course_avg,
-            'health'      => $course_avg >= 65 ? 'good' : ($course_avg >= 40 ? 'moderate' : 'poor'),
+            'course_id'    => $cid,
+            'title'        => $ctitle,
+            'enrolled'     => $enroll_counts[$cid] ?? 0,
+            'avg_mastery'  => $q_avg,
+            'avg_exam'     => $e_avg,
+            'combined_avg' => $c_avg,
+            'health'       => $c_avg >= 65 ? 'good' : ($c_avg >= 40 ? 'moderate' : 'poor'),
         ];
     }
+
+    $class_avg = !empty($all_combined) ? round(array_sum($all_combined) / count($all_combined), 1) : 0;
 
     return [
         'courses'          => $courses,
@@ -434,6 +478,7 @@ function getLecturerDecisionData(int $lecturer_id, $conn): array
         'top_students'     => array_slice($top_students,     0, 10),
         'skill_averages'   => $skill_averages,
         'class_summary'    => $class_summary,
+        'class_avg'        => $class_avg,
     ];
 }
 
@@ -441,13 +486,33 @@ function getLecturerDecisionData(int $lecturer_id, $conn): array
 //  EMAIL SENDER (PHPMailer-free version using PHP mail())
 //  For production, replace mail() with PHPMailer + SMTP.
 // ─────────────────────────────────────────────────────────────────────
+
+// ... previous code (getLecturerDecisionData, etc.)
+
+// ─────────────────────────────────────────────────────────────────────
+//  EMAIL SENDER (Updated with SMTP settings)
+// ─────────────────────────────────────────────────────────────────────
 function sendLmsEmail(string $to, string $subject, string $body): bool
 {
+    // Force SMTP settings for XAMPP
+    ini_set("SMTP", "smtp.gmail.com"); 
+    ini_set("smtp_port", "587");
+    ini_set("sendmail_from", "noreply@smartlms.local");
+
     $headers  = "From: noreply@smartlms.local\r\n";
     $headers .= "Reply-To: noreply@smartlms.local\r\n";
     $headers .= "Content-Type: text/plain; charset=UTF-8\r\n";
     $headers .= "X-Mailer: SmartLMS-PHP\r\n";
 
-    return mail($to, $subject, $body, $headers);
+    // The @ suppresses the warning if the connection still fails
+    return @mail($to, $subject, $body, $headers);
 }
+?>
+
+
+
+
+
+
+
 ?>

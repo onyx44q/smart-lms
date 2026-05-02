@@ -2,18 +2,26 @@
 include 'config.php';
 checkRole('lecturer');
 
-$id = mysqli_real_escape_string($conn, $_GET['id']);
-$query = mysqli_query($conn, "SELECT * FROM materials WHERE id = '$id'");
-$data = mysqli_fetch_assoc($query);
+$id    = intval($_GET['id']);
+$query = mysqli_query($conn, "SELECT * FROM materials WHERE id = $id");
+$data  = mysqli_fetch_assoc($query);
 
-if (isset($_POST['update_resource'])) {
-    $title = mysqli_real_escape_string($conn, $_POST['title']);
-    $course_id = mysqli_real_escape_string($conn, $_POST['course_id']);
-    
-    mysqli_query($conn, "UPDATE materials SET title = '$title', course_id = '$course_id' WHERE id = '$id'");
-    header("Location: upload_materials.php?status=success&msg=Updated");
+if (!$data) {
+    header("Location: lecturer_dashboard.php");
     exit();
 }
+
+if (isset($_POST['update_resource'])) {
+    $title     = mysqli_real_escape_string($conn, $_POST['title']);
+    $course_id = intval($_POST['course_id']);
+
+    mysqli_query($conn, "UPDATE materials SET title = '$title', course_id = $course_id WHERE id = $id");
+    header("Location: lecturer_dashboard.php?view_course=$course_id&updated=1");
+    exit();
+}
+
+// The course to return to when Cancel is clicked (original course before any change)
+$return_course = intval($data['course_id']);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -35,7 +43,7 @@ if (isset($_POST['update_resource'])) {
                 <select name="course_id" class="w-full p-4 bg-slate-50 border rounded-2xl">
                     <?php 
                     $courses = mysqli_query($conn, "SELECT * FROM courses");
-                    while($c = mysqli_fetch_assoc($courses)) {
+                    while ($c = mysqli_fetch_assoc($courses)) {
                         $selected = ($c['id'] == $data['course_id']) ? "selected" : "";
                         echo "<option value='{$c['id']}' $selected>{$c['title']}</option>";
                     }
@@ -43,7 +51,7 @@ if (isset($_POST['update_resource'])) {
                 </select>
             </div>
             <button type="submit" name="update_resource" class="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-lg">Save Changes</button>
-            <a href="upload_materials.php" class="block text-center text-slate-400 text-[10px] font-black uppercase tracking-widest mt-4">Cancel</a>
+            <a href="lecturer_dashboard.php?view_course=<?php echo $return_course; ?>" class="block text-center text-slate-400 text-[10px] font-black uppercase tracking-widest mt-4">Cancel</a>
         </form>
     </div>
 </body>
