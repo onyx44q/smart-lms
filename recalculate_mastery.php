@@ -60,6 +60,7 @@ function infer_skill_name(array $quiz): string {
  */
 function recalculate_mastery_for_student(int $student_id, $conn): array {
 
+
     // ── One-time schema fix: add UNIQUE key if missing ──────────────
     // The original table had no unique constraint, causing duplicate rows.
     // This safely adds it (IF NOT EXISTS) and deduplicates old data.
@@ -82,6 +83,8 @@ function recalculate_mastery_for_student(int $student_id, $conn): array {
            AND sm1.skill_name = sm2.skill_name
            AND sm1.id > sm2.id"
     );
+
+
 
     // ── Fetch all results for this student, oldest first ────────────
     $res = mysqli_query($conn,

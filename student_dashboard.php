@@ -90,6 +90,7 @@ if (mastery_needs_recalculation($user_id, $conn)) {
     recalculate_mastery_for_student($user_id, $conn);
 }
 
+
 // ── Mastery data — computed using AI engine incremental rules, scoped to course ──
 // We replay quiz RESULTS through the same +8.5 / +3.2 / -5.0 delta rules used
 // in ai_engine.php so progress bars reflect accumulated mastery, NOT raw score
@@ -129,13 +130,34 @@ if ($view_course_id) {
     }
 } else {
     // Global fallback: take highest accumulated value per skill across all courses
+
+// ── Mastery data — scoped to the selected course ─────────────────────
+// Compute directly from quiz RESULTS for this course so Smith's scores
+// never bleed into Lenny's course view (or vice versa).
+if ($view_course_id) {
+    $mastery_query = mysqli_query($conn,
+        "SELECT q.skill_name, ROUND(AVG(r.score), 1) AS mastery_level
+         FROM results r
+         JOIN quizzes q ON q.id = r.quiz_id
+         WHERE r.student_id = $user_id AND q.course_id = $view_course_id
+         GROUP BY q.skill_name"
+    );
+} else {
+    // Fallback (no course selected): global view
+
     $mastery_query = mysqli_query($conn,
         "SELECT skill_name, MAX(mastery_level) AS mastery_level
          FROM student_mastery WHERE student_id = '$user_id' GROUP BY skill_name"
     );
+
     while ($m = mysqli_fetch_assoc($mastery_query)) $masteryData[] = $m;
 }
 
+=======
+}
+$masteryData = [];
+while ($m = mysqli_fetch_assoc($mastery_query)) $masteryData[] = $m;
+>>>>>>> b76dc847ee7dc9b03ce4891a2c3b9571d42e9084
 $avgMastery = count($masteryData) > 0
     ? round(array_sum(array_column($masteryData, 'mastery_level')) / count($masteryData), 1)
     : 0;
