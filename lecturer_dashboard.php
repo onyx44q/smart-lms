@@ -54,18 +54,21 @@ $lecturerName = $user_data['full_name'] ?? $_SESSION['full_name'] ?? 'Lecturer';
 // Checks BOTH relationships:
 //   courses.lecturer_id  — set when admin assigns lecturer to course
 //   users.course_id      — the course stored on the lecturer's own user record
-$courses_query = mysqli_query($conn,
-    "SELECT DISTINCT id, title FROM courses
-     WHERE lecturer_id = '$user_id'
-        OR id = (SELECT course_id FROM users WHERE id = '$user_id' AND course_id IS NOT NULL LIMIT 1)
-     ORDER BY title ASC"
-);
+//   course_units.lecturer_id — set when admin assigns lecturer to a unit only
+$LECT_COURSE_SQL = "SELECT DISTINCT c.id, c.title FROM courses c
+     WHERE c.lecturer_id = '$user_id'
+        OR c.id = (SELECT course_id FROM users WHERE id = '$user_id' AND course_id IS NOT NULL LIMIT 1)
+        OR c.id IN (SELECT cu.course_id FROM course_units cu WHERE cu.lecturer_id = '$user_id')
+     ORDER BY c.title ASC";
 
-// ── Helper: get all course IDs belonging to this lecturer (both columns) ──
+$courses_query = mysqli_query($conn, $LECT_COURSE_SQL);
+
+// ── Helper: get all course IDs belonging to this lecturer (all three columns) ──
 $lect_course_ids_res = mysqli_query($conn,
-    "SELECT DISTINCT id FROM courses
-     WHERE lecturer_id = '$user_id'
-        OR id = (SELECT course_id FROM users WHERE id = '$user_id' AND course_id IS NOT NULL LIMIT 1)"
+    "SELECT DISTINCT c.id FROM courses c
+     WHERE c.lecturer_id = '$user_id'
+        OR c.id = (SELECT course_id FROM users WHERE id = '$user_id' AND course_id IS NOT NULL LIMIT 1)
+        OR c.id IN (SELECT cu.course_id FROM course_units cu WHERE cu.lecturer_id = '$user_id')"
 );
 $lect_course_ids = [];
 while ($r = mysqli_fetch_assoc($lect_course_ids_res)) $lect_course_ids[] = intval($r['id']);
@@ -928,8 +931,22 @@ $avgMastery = $decisionData['class_avg'] ?? 0; // combined quiz+exam avg from de
         }
 
         // ── Students registered for this unit ─────────────────────
+        // Auto-sync: any student enrolled in the parent course who is NOT yet
+        // in unit_registrations gets inserted now (handles late-enrollments and
+        // units that were created before students enrolled).
         $reg_students = [];
         if ($sel_unit_id > 0) {
+            // Find parent course
+            $parent_course_id = intval($sel_unit['course_id'] ?? 0);
+            if ($parent_course_id) {
+                mysqli_query($conn,
+                    "INSERT IGNORE INTO unit_registrations (student_id, unit_id)
+                     SELECT e.student_id, $sel_unit_id
+                     FROM enrollments e
+                     WHERE e.course_id = $parent_course_id"
+                );
+            }
+            // Now load all registered students (guaranteed to include everyone enrolled)
             $sr = mysqli_query($conn,
                 "SELECT u.id, u.full_name, u.email
                  FROM unit_registrations ur

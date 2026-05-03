@@ -8,10 +8,28 @@ $studentCount = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) as total
 $lecturerCount = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) as total FROM users WHERE role='lecturer'"))['total'] ?? 0;
 $courseCount = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) as total FROM courses"))['total'] ?? 0;
 
-// Performance Metrics
-$excellingCount = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(DISTINCT student_id) as total FROM student_mastery WHERE mastery_level >= 75"))['total'] ?? 0;
-$riskCount = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(DISTINCT student_id) as total FROM student_mastery WHERE mastery_level < 40"))['total'] ?? 0;
-$avgMastery = mysqli_fetch_assoc(mysqli_query($conn, "SELECT AVG(mastery_level) as avg FROM student_mastery"))['avg'] ?? 0;
+// Ensure mastery is accurate for every student that has quiz results
+include_once __DIR__ . '/recalculate_mastery.php';
+$all_result_students = mysqli_query($conn, "SELECT DISTINCT student_id FROM results");
+while ($rs = mysqli_fetch_assoc($all_result_students)) {
+    recalculate_mastery_for_student(intval($rs['student_id']), $conn);
+}
+
+// Performance Metrics — computed as per-student AVERAGE mastery (accurate)
+$masteryStats = mysqli_fetch_assoc(mysqli_query($conn,
+    "SELECT
+        COUNT(CASE WHEN avg_m >= 75 THEN 1 END) AS excelling,
+        COUNT(CASE WHEN avg_m < 40  THEN 1 END) AS at_risk,
+        AVG(avg_m) AS global_avg
+     FROM (
+         SELECT student_id, AVG(mastery_level) AS avg_m
+         FROM student_mastery
+         GROUP BY student_id
+     ) t"
+));
+$excellingCount = intval($masteryStats['excelling'] ?? 0);
+$riskCount      = intval($masteryStats['at_risk']   ?? 0);
+$avgMastery     = round(floatval($masteryStats['global_avg'] ?? 0), 1);
 
 $view = $_GET['view'] ?? 'dashboard'; 
 $filter = $_GET['filter'] ?? 'all';
@@ -558,11 +576,25 @@ $filter = $_GET['filter'] ?? 'all';
                     SUM(ua.max_mark) AS total_max,
                     ROUND(COALESCE(SUM(um.mark)/NULLIF(SUM(ua.max_mark),0)*100,0),1) AS pct,
                     COUNT(ua.id) AS assessment_count,
-                    COUNT(um.id) AS graded_count
-             FROM unit_registrations ur
-             JOIN users u ON u.id = ur.student_id
-             JOIN course_units cu ON cu.id = ur.unit_id $unit_where
-             JOIN courses c ON c.id = cu.course_id
+                    COUNT(um.id) AS graded_count,
+                    /* exam: explicit type=exam OR name contains exam/final/end-of-term keywords */
+                    ROUND(
+                        SUM(CASE WHEN (ua.type='exam' OR LOWER(ua.name) REGEXP 'exam|final|end.?term|end.?year|end.?sem') THEN um.mark ELSE NULL END)
+                        / NULLIF(SUM(CASE WHEN (ua.type='exam' OR LOWER(ua.name) REGEXP 'exam|final|end.?term|end.?year|end.?sem') THEN ua.max_mark ELSE NULL END), 0)
+                        * 100
+                    , 1) AS exam_pct,
+                    /* coursework: explicit type=coursework AND name does NOT match exam keywords */
+                    ROUND(
+                        SUM(CASE WHEN ua.type='coursework' AND NOT (LOWER(ua.name) REGEXP 'exam|final|end.?term|end.?year|end.?sem') THEN um.mark ELSE NULL END)
+                        / NULLIF(SUM(CASE WHEN ua.type='coursework' AND NOT (LOWER(ua.name) REGEXP 'exam|final|end.?term|end.?year|end.?sem') THEN ua.max_mark ELSE NULL END), 0)
+                        * 100
+                    , 1) AS cw_pct,
+                    COUNT(CASE WHEN (ua.type='exam' OR LOWER(ua.name) REGEXP 'exam|final|end.?term|end.?year|end.?sem') AND um.id IS NOT NULL THEN 1 END) AS exam_graded_count,
+                    COUNT(CASE WHEN ua.type='coursework' AND NOT (LOWER(ua.name) REGEXP 'exam|final|end.?term|end.?year|end.?sem') AND um.id IS NOT NULL THEN 1 END) AS cw_graded_count
+             FROM enrollments e
+             JOIN users u ON u.id = e.student_id
+             JOIN course_units cu ON cu.course_id = e.course_id $unit_where
+             JOIN courses c ON c.id = e.course_id
              LEFT JOIN users lecturer ON lecturer.id = cu.lecturer_id
              LEFT JOIN unit_assessments ua ON ua.unit_id = cu.id
              LEFT JOIN unit_marks um ON um.assessment_id = ua.id AND um.student_id = u.id
@@ -577,6 +609,42 @@ $filter = $_GET['filter'] ?? 'all';
                 if ($filter_grade !== 'F' && $g !== $filter_grade) continue;
             }
             $marks_rows[] = $mr;
+        }
+
+        // ── Fallback: fill exam_pct from student_marks for rows that have no
+        //    unit_assessments of type 'exam' (e.g. units that only have coursework).
+        //    Build a course-level exam pct map from student_marks once, then apply.
+        if (!empty($marks_rows)) {
+            $fb_student_ids = array_unique(array_column($marks_rows, 'student_id'));
+            $fb_course_ids  = array_unique(array_column($marks_rows, 'course_id'));
+            $fb_sids_str    = implode(',', array_map('intval', $fb_student_ids));
+            $fb_cids_str    = implode(',', array_map('intval', $fb_course_ids));
+            $fb_res = mysqli_query($conn,
+                "SELECT student_id, course_id,
+                        exam_mark, exam_max, coursework_mark, coursework_max
+                 FROM student_marks
+                 WHERE student_id IN ($fb_sids_str) AND course_id IN ($fb_cids_str)"
+            );
+            $fb_exam = [];  // [student_id][course_id] = exam_pct
+            while ($fb = mysqli_fetch_assoc($fb_res)) {
+                $fs  = intval($fb['student_id']);
+                $fc  = intval($fb['course_id']);
+                $ep  = floatval($fb['exam_max'])       > 0
+                    ? round(floatval($fb['exam_mark'])       / floatval($fb['exam_max'])       * 100, 1)
+                    : null;
+                if ($ep !== null) $fb_exam[$fs][$fc] = $ep;
+            }
+            foreach ($marks_rows as &$mr) {
+                if (intval($mr['exam_graded_count']) === 0) {
+                    $fs = intval($mr['student_id']);
+                    $fc = intval($mr['course_id']);
+                    if (isset($fb_exam[$fs][$fc])) {
+                        $mr['exam_pct']          = $fb_exam[$fs][$fc];
+                        $mr['exam_graded_count'] = 1;   // mark as having data
+                    }
+                }
+            }
+            unset($mr);
         }
 
         $graded_rows  = array_filter($marks_rows, fn($r) => intval($r['graded_count']) > 0);
@@ -680,14 +748,20 @@ $filter = $_GET['filter'] ?? 'all';
                         <th class="text-[9px] font-black uppercase text-slate-400 tracking-widest px-4 py-3">Lecturer</th>
                         <th class="text-[9px] font-black uppercase text-slate-400 tracking-widest px-4 py-3 text-center">Total Marks</th>
                         <th class="text-[9px] font-black uppercase text-slate-400 tracking-widest px-4 py-3 text-center">Score %</th>
+                        <th class="text-[9px] font-black uppercase text-red-400 tracking-widest px-4 py-3 text-center">Exam %</th>
+                        <th class="text-[9px] font-black uppercase text-blue-400 tracking-widest px-4 py-3 text-center">C/Work %</th>
                         <th class="text-[9px] font-black uppercase text-slate-400 tracking-widest px-4 py-3 text-center">Grade</th>
                         <th class="text-[9px] font-black uppercase text-slate-400 tracking-widest px-4 py-3 text-center">Status</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-50">
                 <?php foreach ($marks_rows as $mr):
-                    $has_marks = intval($mr['graded_count']) > 0;
-                    $pct = floatval($mr['pct']);
+                    $has_marks   = intval($mr['graded_count']) > 0;
+                    $has_exam    = intval($mr['exam_graded_count'] ?? 0) > 0;
+                    $has_cw      = intval($mr['cw_graded_count']  ?? 0) > 0;
+                    $pct         = floatval($mr['pct']);
+                    $exam_pct    = floatval($mr['exam_pct'] ?? 0);
+                    $cw_pct      = floatval($mr['cw_pct']  ?? 0);
                     [$grade_l, $grade_c] = $grade_fn($pct);
                 ?>
                 <tr class="hover:bg-slate-50/60 transition-colors">
@@ -711,6 +785,22 @@ $filter = $_GET['filter'] ?? 'all';
                         <?php if ($has_marks): ?>
                         <span class="text-base font-black <?php echo $pct >= 40 ? 'text-slate-900' : 'text-red-600'; ?>"><?php echo $pct; ?>%</span>
                         <?php else: ?><span class="text-slate-300">—</span><?php endif; ?>
+                    </td>
+                    <!-- Exam % column -->
+                    <td class="px-4 py-3 text-center">
+                        <?php if ($has_exam): ?>
+                        <span class="inline-flex items-center gap-1 text-sm font-black <?php echo $exam_pct >= 40 ? 'text-red-700' : 'text-red-400'; ?>">
+                            <?php echo $exam_pct; ?>%
+                        </span>
+                        <?php else: ?><span class="text-slate-300 text-xs">—</span><?php endif; ?>
+                    </td>
+                    <!-- Coursework % column -->
+                    <td class="px-4 py-3 text-center">
+                        <?php if ($has_cw): ?>
+                        <span class="text-sm font-black <?php echo $cw_pct >= 40 ? 'text-blue-700' : 'text-blue-400'; ?>">
+                            <?php echo $cw_pct; ?>%
+                        </span>
+                        <?php else: ?><span class="text-slate-300 text-xs">—</span><?php endif; ?>
                     </td>
                     <td class="px-4 py-3 text-center">
                         <?php if ($has_marks): ?>
@@ -742,6 +832,193 @@ $filter = $_GET['filter'] ?? 'all';
 
 
         <?php endif; /* end view==marks */ ?>
+
+        <?php if ($view == 'performance'):
+            $is_excelling  = ($filter === 'excelling');
+            $having_clause = $is_excelling ? 'HAVING avg_m >= 75' : 'HAVING avg_m < 40';
+            $order_clause  = $is_excelling ? 'ORDER BY avg_m DESC' : 'ORDER BY avg_m ASC';
+            $page_title    = $is_excelling ? 'Excelling Students' : 'At-Risk Students';
+            $page_sub      = $is_excelling
+                ? 'Students with an average mastery of 75% or above across all skills.'
+                : 'Students with an average mastery below 40% — require immediate attention.';
+            $accent        = $is_excelling ? 'emerald' : 'rose';
+            $icon          = $is_excelling ? 'fa-crown' : 'fa-triangle-exclamation';
+
+            // Filtered students
+            $perf_res = mysqli_query($conn,
+                "SELECT u.id AS student_id, u.full_name, u.email,
+                        u.career_path, ROUND(t.avg_m, 1) AS avg_mastery
+                 FROM users u
+                 JOIN (
+                     SELECT student_id, AVG(mastery_level) AS avg_m
+                     FROM student_mastery
+                     GROUP BY student_id
+                     $having_clause
+                 ) t ON t.student_id = u.id
+                 $order_clause"
+            );
+            $perf_students = [];
+            while ($ps = mysqli_fetch_assoc($perf_res)) $perf_students[] = $ps;
+
+            // Course / Unit / Lecturer details per student
+            $perf_details = [];
+            if (!empty($perf_students)) {
+                $perf_ids = implode(',', array_column($perf_students, 'student_id'));
+                $det_res  = mysqli_query($conn,
+                    "SELECT e.student_id,
+                            c.id   AS course_id,   c.title AS course_title,
+                            cu.id  AS unit_id,     cu.title AS unit_title,   cu.unit_code,
+                            lec.full_name AS lecturer_name
+                     FROM enrollments e
+                     JOIN courses c ON c.id = e.course_id
+                     LEFT JOIN unit_registrations ur ON ur.student_id = e.student_id
+                     LEFT JOIN course_units cu ON cu.id = ur.unit_id AND cu.course_id = c.id
+                     LEFT JOIN users lec ON lec.id = cu.lecturer_id
+                     WHERE e.student_id IN ($perf_ids)
+                     ORDER BY e.student_id ASC, c.title ASC, cu.title ASC"
+                );
+                while ($d = mysqli_fetch_assoc($det_res)) {
+                    $perf_details[intval($d['student_id'])][] = $d;
+                }
+            }
+        ?>
+        <!-- ── PERFORMANCE VIEW ── -->
+        <div class="flex items-center justify-between mb-8">
+            <div>
+                <a href="?view=dashboard" class="text-[10px] font-black uppercase text-slate-400 hover:text-blue-500 mb-2 block">
+                    <i class="fa-solid fa-arrow-left mr-1"></i> Back to Overview
+                </a>
+                <h2 class="text-2xl font-black text-slate-900 flex items-center gap-3">
+                    <i class="fa-solid <?php echo $icon; ?> text-<?php echo $accent; ?>-500"></i>
+                    <?php echo $page_title; ?>
+                </h2>
+                <p class="text-slate-500 text-sm mt-1"><?php echo $page_sub; ?></p>
+            </div>
+            <div class="flex gap-3">
+                <a href="?view=performance&filter=excelling"
+                   class="px-4 py-2 rounded-xl text-xs font-black uppercase transition-all <?php echo $is_excelling ? 'bg-emerald-600 text-white shadow-lg' : 'bg-white border border-slate-200 text-slate-500 hover:border-emerald-400'; ?>">
+                    <i class="fa-solid fa-crown mr-1"></i>Doing Well (<?php echo $excellingCount; ?>)
+                </a>
+                <a href="?view=performance&filter=risk"
+                   class="px-4 py-2 rounded-xl text-xs font-black uppercase transition-all <?php echo !$is_excelling ? 'bg-rose-600 text-white shadow-lg' : 'bg-white border border-slate-200 text-slate-500 hover:border-rose-400'; ?>">
+                    <i class="fa-solid fa-triangle-exclamation mr-1"></i>At Risk (<?php echo $riskCount; ?>)
+                </a>
+            </div>
+        </div>
+
+        <?php if (empty($perf_students)): ?>
+        <div class="bg-white rounded-[2rem] border border-dashed border-slate-200 p-16 text-center">
+            <i class="fa-solid <?php echo $icon; ?> text-slate-200 text-5xl mb-4"></i>
+            <p class="text-slate-500 font-bold">No students in this category yet.</p>
+            <p class="text-slate-400 text-xs mt-1">Students appear here once they have completed quizzes and their mastery is calculated.</p>
+        </div>
+        <?php else: ?>
+        <div class="space-y-4">
+        <?php foreach ($perf_students as $ps):
+            $sid      = intval($ps['student_id']);
+            $details  = $perf_details[$sid] ?? [];
+            $mastery  = floatval($ps['avg_mastery']);
+            $bar_color = $mastery >= 75 ? 'bg-emerald-500' : ($mastery >= 40 ? 'bg-amber-500' : 'bg-rose-500');
+
+            // Group details by course
+            $by_course = [];
+            foreach ($details as $d) {
+                $cid = $d['course_id'];
+                if (!isset($by_course[$cid])) {
+                    $by_course[$cid] = ['title' => $d['course_title'], 'units' => []];
+                }
+                if ($d['unit_id']) {
+                    $uid = $d['unit_id'];
+                    if (!isset($by_course[$cid]['units'][$uid])) {
+                        $by_course[$cid]['units'][$uid] = [
+                            'title'    => $d['unit_title'],
+                            'code'     => $d['unit_code'],
+                            'lecturer' => $d['lecturer_name'],
+                        ];
+                    }
+                }
+            }
+        ?>
+        <div class="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
+            <!-- Student header -->
+            <div class="px-6 py-5 flex items-center justify-between">
+                <div class="flex items-center gap-4">
+                    <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr <?php echo $is_excelling ? 'from-emerald-400 to-teal-500' : 'from-rose-400 to-pink-500'; ?> flex items-center justify-center shadow-sm flex-shrink-0">
+                        <span class="text-white font-black text-sm"><?php echo strtoupper(mb_substr($ps['full_name'], 0, 2)); ?></span>
+                    </div>
+                    <div>
+                        <p class="font-black text-slate-900"><?php echo htmlspecialchars($ps['full_name']); ?></p>
+                        <p class="text-[10px] text-slate-400 mt-0.5"><?php echo htmlspecialchars($ps['email']); ?>
+                            <?php if ($ps['career_path']): ?>
+                            &nbsp;·&nbsp; <span class="text-indigo-500 font-bold"><?php echo htmlspecialchars($ps['career_path']); ?></span>
+                            <?php endif; ?>
+                        </p>
+                    </div>
+                </div>
+                <div class="flex flex-col items-end gap-1">
+                    <span class="text-2xl font-black <?php echo $mastery >= 75 ? 'text-emerald-600' : ($mastery >= 40 ? 'text-amber-600' : 'text-rose-600'); ?>">
+                        <?php echo $mastery; ?>%
+                    </span>
+                    <p class="text-[9px] font-black uppercase text-slate-400">Avg Mastery</p>
+                    <div class="w-28 h-1.5 bg-slate-100 rounded-full overflow-hidden mt-1">
+                        <div class="h-full <?php echo $bar_color; ?> rounded-full" style="width:<?php echo min(100,$mastery); ?>%"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Course / Unit / Lecturer breakdown -->
+            <?php if (!empty($by_course)): ?>
+            <div class="border-t border-slate-100 divide-y divide-slate-50">
+                <?php foreach ($by_course as $course_row): ?>
+                <div class="px-6 py-3">
+                    <p class="text-[9px] font-black uppercase text-slate-500 tracking-widest mb-2">
+                        <i class="fa-solid fa-graduation-cap mr-1 text-indigo-400"></i>
+                        <?php echo htmlspecialchars($course_row['title']); ?>
+                    </p>
+                    <?php if (!empty($course_row['units'])): ?>
+                    <div class="flex flex-wrap gap-2">
+                        <?php foreach ($course_row['units'] as $u): ?>
+                        <div class="flex items-center gap-2 bg-slate-50 border border-slate-100 rounded-xl px-3 py-2">
+                            <div class="w-6 h-6 bg-indigo-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                                <i class="fa-solid fa-book text-indigo-500 text-[9px]"></i>
+                            </div>
+                            <div>
+                                <p class="text-xs font-black text-slate-800">
+                                    <?php echo htmlspecialchars($u['title']); ?>
+                                    <?php if ($u['code']): ?>
+                                    <span class="text-[8px] font-bold text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded ml-1"><?php echo htmlspecialchars($u['code']); ?></span>
+                                    <?php endif; ?>
+                                </p>
+                                <?php if ($u['lecturer']): ?>
+                                <p class="text-[9px] text-emerald-600 font-bold mt-0.5">
+                                    <i class="fa-solid fa-chalkboard-teacher mr-0.5"></i><?php echo htmlspecialchars($u['lecturer']); ?>
+                                </p>
+                                <?php else: ?>
+                                <p class="text-[9px] text-amber-500 font-bold mt-0.5">
+                                    <i class="fa-solid fa-circle-exclamation mr-0.5"></i>No lecturer assigned
+                                </p>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                        <?php endforeach; ?>
+                    </div>
+                    <?php else: ?>
+                    <p class="text-[9px] text-slate-400 italic">No units registered in this course.</p>
+                    <?php endif; ?>
+                </div>
+                <?php endforeach; ?>
+            </div>
+            <?php else: ?>
+            <div class="border-t border-slate-100 px-6 py-3">
+                <p class="text-[9px] text-slate-400 italic">Not enrolled in any course yet.</p>
+            </div>
+            <?php endif; ?>
+        </div>
+        <?php endforeach; ?>
+        </div>
+        <?php endif; ?>
+
+        <?php endif; /* end view==performance */ ?>
     </main>
 
     <div id="lecturerModal" style="display:none;" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-6">

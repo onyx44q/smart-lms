@@ -295,12 +295,13 @@ function _lect_infer_skill(array $row): string {
 
 function getLecturerDecisionData(int $lecturer_id, $conn): array
 {
-    // Lecturer's courses
+    // Lecturer's courses — includes direct assignment, user.course_id, AND unit-level assignment
     $courses_res = mysqli_query($conn,
-        "SELECT DISTINCT id, title FROM courses
-         WHERE lecturer_id = $lecturer_id
-            OR id = (SELECT course_id FROM users WHERE id = $lecturer_id AND course_id IS NOT NULL LIMIT 1)
-         ORDER BY title ASC"
+        "SELECT DISTINCT c.id, c.title FROM courses c
+         WHERE c.lecturer_id = $lecturer_id
+            OR c.id = (SELECT course_id FROM users WHERE id = $lecturer_id AND course_id IS NOT NULL LIMIT 1)
+            OR c.id IN (SELECT cu.course_id FROM course_units cu WHERE cu.lecturer_id = $lecturer_id)
+         ORDER BY c.title ASC"
     );
     $courses    = [];
     $course_ids = [];
@@ -363,7 +364,7 @@ function getLecturerDecisionData(int $lecturer_id, $conn): array
         $student_mastery[$sid][$skill] = max(AI_MASTERY_FLOOR, min(AI_MASTERY_CAP, $cur + $delta));
     }
 
-    // ── Fetch final exam / coursework marks for combined scoring ──
+    // ── Fetch final exam / coursework marks from legacy student_marks table ──
     $exam_res = mysqli_query($conn,
         "SELECT student_id, course_id, exam_mark, exam_max, coursework_mark, coursework_max
          FROM student_marks
@@ -379,6 +380,51 @@ function getLecturerDecisionData(int $lecturer_id, $conn): array
         elseif ($ep !== null)              $comb = $ep;
         elseif ($cp !== null)              $comb = $cp;
         if ($comb !== null) $student_exam[$sid] = round($comb, 1);
+    }
+
+    // ── Fetch exam marks from the unit_marks system ──────────────────────
+    // Detects exam assessments by explicit type='exam' OR by name keywords
+    // (handles lecturers who entered exam marks under type='coursework' by mistake).
+    $EXAM_PATTERN = "ua.type='exam' OR LOWER(ua.name) REGEXP 'exam|final|end.?term|end.?year|end.?sem'";
+
+    // Per-student overall exam pct
+    $unit_exam_overall_res = mysqli_query($conn,
+        "SELECT e.student_id,
+                ROUND(SUM(um.mark) / NULLIF(SUM(ua.max_mark), 0) * 100, 1) AS exam_pct
+         FROM enrollments e
+         JOIN course_units cu ON cu.course_id = e.course_id
+         JOIN unit_assessments ua ON ua.unit_id = cu.id AND ($EXAM_PATTERN)
+         JOIN unit_marks um ON um.assessment_id = ua.id AND um.student_id = e.student_id
+         WHERE e.student_id IN ($student_ids_str)
+           AND e.course_id  IN ($ids_str)
+         GROUP BY e.student_id"
+    );
+    while ($r = mysqli_fetch_assoc($unit_exam_overall_res)) {
+        $sid = intval($r['student_id']);
+        if (!isset($student_exam[$sid]) && $r['exam_pct'] !== null) {
+            $student_exam[$sid] = floatval($r['exam_pct']);
+        }
+    }
+
+    // Per-student per-course exam pct (for course health card avg_exam)
+    $student_unit_exam_by_course = [];
+    $unit_exam_course_res = mysqli_query($conn,
+        "SELECT e.student_id, e.course_id,
+                ROUND(SUM(um.mark) / NULLIF(SUM(ua.max_mark), 0) * 100, 1) AS exam_pct
+         FROM enrollments e
+         JOIN course_units cu ON cu.course_id = e.course_id
+         JOIN unit_assessments ua ON ua.unit_id = cu.id AND ($EXAM_PATTERN)
+         JOIN unit_marks um ON um.assessment_id = ua.id AND um.student_id = e.student_id
+         WHERE e.student_id IN ($student_ids_str)
+           AND e.course_id  IN ($ids_str)
+         GROUP BY e.student_id, e.course_id"
+    );
+    while ($r = mysqli_fetch_assoc($unit_exam_course_res)) {
+        $sid = intval($r['student_id']);
+        $cid = intval($r['course_id']);
+        if ($r['exam_pct'] !== null) {
+            $student_unit_exam_by_course[$sid][$cid] = floatval($r['exam_pct']);
+        }
     }
 
     // ── Classify each student ──
@@ -453,7 +499,13 @@ function getLecturerDecisionData(int $lecturer_id, $conn): array
         foreach ($c_sids as $sid) {
             $skills = $student_mastery[$sid] ?? [];
             if (!empty($skills)) $q_avgs[] = array_sum($skills) / count($skills);
-            if (isset($student_exam[$sid]))  $e_avgs[] = $student_exam[$sid];
+            // Per-course unit_marks exam takes priority — it is course-specific and accurate.
+            // Fall back to legacy student_marks only when no unit-level exam exists.
+            if (isset($student_unit_exam_by_course[$sid][$cid])) {
+                $e_avgs[] = $student_unit_exam_by_course[$sid][$cid];
+            } elseif (isset($student_exam[$sid])) {
+                $e_avgs[] = $student_exam[$sid];
+            }
         }
         $q_avg = !empty($q_avgs) ? round(array_sum($q_avgs) / count($q_avgs), 1) : 0;
         $e_avg = !empty($e_avgs) ? round(array_sum($e_avgs) / count($e_avgs), 1) : null;
@@ -516,3 +568,9 @@ function sendLmsEmail(string $to, string $subject, string $body): bool
 
 
 ?>
+
+
+
+
+
+
