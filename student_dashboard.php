@@ -181,6 +181,48 @@ if (!empty($enrolled_ids)) {
         while ($aRow = mysqli_fetch_assoc($assign_res)) $assignments_for_student[] = $aRow;
     }
 }
+
+// ── Attendance data for student ──────────────────────────────────────────
+// Auto-create tables if absent
+mysqli_query($conn, "CREATE TABLE IF NOT EXISTS `attendance_sessions` (
+  `id` INT(11) NOT NULL AUTO_INCREMENT, `unit_id` INT(11) NOT NULL,
+  `lecturer_id` INT(11) NOT NULL, `session_date` DATE NOT NULL,
+  `title` VARCHAR(255) NOT NULL DEFAULT 'Lecture',
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`), KEY(`unit_id`), KEY(`lecturer_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+mysqli_query($conn, "CREATE TABLE IF NOT EXISTS `attendance_records` (
+  `id` INT(11) NOT NULL AUTO_INCREMENT, `session_id` INT(11) NOT NULL,
+  `student_id` INT(11) NOT NULL, `status` ENUM('present','absent') NOT NULL DEFAULT 'absent',
+  `marked_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`), UNIQUE KEY `uq_ses_stu` (`session_id`,`student_id`), KEY(`student_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+$student_attendance = [];
+$att_res = mysqli_query($conn,
+    "SELECT cu.id AS unit_id, cu.title AS unit_title, cu.unit_code,
+            c.title AS course_title,
+            COUNT(DISTINCT ats.id)                                                        AS total_sessions,
+            SUM(CASE WHEN ar.status='present' THEN 1 ELSE 0 END)                          AS attended,
+            SUM(CASE WHEN ar.status='absent'  THEN 1 ELSE 0 END)                          AS absences,
+            ROUND(SUM(CASE WHEN ar.status='absent' THEN 1 ELSE 0 END)
+                  / NULLIF(COUNT(DISTINCT ats.id),0)*100,1)                                AS absence_pct
+     FROM unit_registrations ur
+     JOIN course_units cu ON cu.id = ur.unit_id
+     JOIN courses c ON c.id = cu.course_id
+     LEFT JOIN attendance_sessions ats ON ats.unit_id = cu.id
+     LEFT JOIN attendance_records  ar  ON ar.session_id = ats.id AND ar.student_id = $user_id
+     WHERE ur.student_id = $user_id
+     GROUP BY cu.id, cu.title, cu.unit_code, c.title
+     ORDER BY c.title, cu.title"
+);
+if ($att_res) {
+    while ($arow = mysqli_fetch_assoc($att_res)) {
+        $arow['barred'] = (floatval($arow['absence_pct'] ?? 0) > 33.33);
+        $student_attendance[] = $arow;
+    }
+}
+$barred_count = count(array_filter($student_attendance, fn($a) => $a['barred']));
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -321,6 +363,11 @@ if (!empty($enrolled_ids)) {
             <a href="javascript:void(0)" onclick="switchView('my-results')" id="nav-my-results" class="sidebar-item flex items-center space-x-3 p-3 rounded-xl transition-all text-slate-500">
                 <i class="fa-solid fa-chart-simple w-5"></i>
                 <span class="text-xs uppercase tracking-wider">My Results</span>
+            </a>
+
+            <a href="javascript:void(0)" onclick="switchView('my-attendance')" id="nav-my-attendance" class="sidebar-item flex items-center space-x-3 p-3 rounded-xl transition-all text-slate-500">
+                <i class="fa-solid fa-calendar-check w-5"></i>
+                <span class="text-xs uppercase tracking-wider">Attendance</span>
             </a>
 
             <div id="course-dropdown">
@@ -1252,6 +1299,105 @@ if (!empty($enrolled_ids)) {
         </div>
         <!-- END MY RESULTS -->
 
+        <!-- ── MY ATTENDANCE ──────────────────────────────────────────── -->
+        <div id="view-my-attendance" class="view-section p-6 lg:p-8">
+            <div class="mb-7">
+                <h2 class="text-2xl font-black text-slate-900">My Attendance</h2>
+                <p class="text-slate-500 text-xs mt-1">Track your attendance per unit. Students with more than 33.33% absences are barred from sitting the exam.</p>
+            </div>
+
+            <?php if ($barred_count > 0): ?>
+            <div class="mb-6 bg-red-50 border border-red-200 rounded-2xl p-5 flex items-start space-x-4">
+                <div class="w-10 h-10 bg-red-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                    <i class="fa-solid fa-triangle-exclamation text-red-500"></i>
+                </div>
+                <div>
+                    <p class="font-black text-red-700">⚠️ Exam Bar Warning</p>
+                    <p class="text-red-500 text-sm mt-1">You have exceeded the 33.33% absence threshold in <strong><?php echo $barred_count; ?></strong> unit(s). You may not be allowed to sit the exam for those units.</p>
+                </div>
+            </div>
+            <?php endif; ?>
+
+            <?php if (empty($student_attendance)): ?>
+            <div class="bg-white rounded-2xl border border-dashed border-slate-200 p-12 text-center">
+                <i class="fa-solid fa-calendar-xmark text-slate-200 text-5xl mb-4 block"></i>
+                <p class="text-slate-500 font-bold">No attendance records yet.</p>
+                <p class="text-slate-400 text-sm mt-1">Your lecturer hasn't recorded any sessions yet.</p>
+            </div>
+            <?php else: ?>
+            <div class="space-y-4">
+                <?php foreach ($student_attendance as $att): ?>
+                <?php
+                    $apct  = floatval($att['absence_pct'] ?? 0);
+                    $ppct  = $att['total_sessions'] > 0 ? round(100 - $apct, 1) : 0;
+                    $barred = $att['barred'];
+                    $color = $barred ? 'red' : ($apct > 20 ? 'amber' : 'emerald');
+                    $borderCls = $barred ? 'border-red-200 bg-red-50/30' : 'border-slate-100';
+                ?>
+                <div class="bg-white rounded-2xl border <?php echo $borderCls; ?> shadow-sm overflow-hidden">
+                    <div class="px-6 py-4 flex items-center justify-between border-b border-slate-100 bg-gradient-to-r from-slate-50 to-blue-50/20">
+                        <div>
+                            <div class="flex items-center gap-2 mb-0.5">
+                                <h3 class="font-black text-slate-900 text-sm"><?php echo htmlspecialchars($att['unit_title']); ?></h3>
+                                <?php if ($att['unit_code']): ?>
+                                <span class="text-[9px] font-black bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-md"><?php echo htmlspecialchars($att['unit_code']); ?></span>
+                                <?php endif; ?>
+                            </div>
+                            <p class="text-[10px] text-slate-400"><?php echo htmlspecialchars($att['course_title']); ?></p>
+                        </div>
+                        <?php if ($att['total_sessions'] == 0): ?>
+                        <span class="text-[10px] font-black text-slate-300 border border-slate-200 px-3 py-1.5 rounded-xl">No Sessions Yet</span>
+                        <?php elseif ($barred): ?>
+                        <span class="text-[10px] font-black text-red-600 bg-red-50 border border-red-200 px-3 py-1.5 rounded-xl animate-pulse"><i class="fa-solid fa-ban mr-1"></i>EXAM BARRED</span>
+                        <?php else: ?>
+                        <span class="text-[10px] font-black text-emerald-600 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl"><i class="fa-solid fa-circle-check mr-1"></i>Exam Eligible</span>
+                        <?php endif; ?>
+                    </div>
+                    <div class="px-6 py-5">
+                        <?php if ($att['total_sessions'] == 0): ?>
+                        <p class="text-slate-400 text-xs text-center py-2 italic">Your lecturer hasn't recorded attendance for this unit yet.</p>
+                        <?php else: ?>
+                        <!-- Stats row -->
+                        <div class="grid grid-cols-3 gap-4 mb-4">
+                            <div class="text-center">
+                                <p class="text-2xl font-black text-slate-900"><?php echo intval($att['total_sessions']); ?></p>
+                                <p class="text-[10px] font-black uppercase text-slate-400">Total Sessions</p>
+                            </div>
+                            <div class="text-center">
+                                <p class="text-2xl font-black text-emerald-600"><?php echo intval($att['attended']); ?></p>
+                                <p class="text-[10px] font-black uppercase text-slate-400">Attended</p>
+                            </div>
+                            <div class="text-center">
+                                <p class="text-2xl font-black text-<?php echo $color; ?>-600"><?php echo intval($att['absences']); ?></p>
+                                <p class="text-[10px] font-black uppercase text-slate-400">Absent</p>
+                            </div>
+                        </div>
+                        <!-- Attendance progress bar -->
+                        <div class="space-y-1.5">
+                            <div class="flex justify-between text-[10px] font-black uppercase">
+                                <span class="text-emerald-500">Attendance: <?php echo $ppct; ?>%</span>
+                                <span class="text-<?php echo $color; ?>-500">Absences: <?php echo $apct; ?>%
+                                    <?php if ($barred): ?><span class="text-red-600 ml-1">(exceeds 33.33% limit)</span><?php endif; ?>
+                                </span>
+                            </div>
+                            <div class="h-3 bg-slate-100 rounded-full overflow-hidden flex">
+                                <div class="h-full bg-emerald-400 transition-all duration-1000" style="width:<?php echo $ppct; ?>%"></div>
+                                <div class="h-full bg-<?php echo $color; ?>-400 transition-all duration-1000" style="width:<?php echo min(100,$apct); ?>%"></div>
+                            </div>
+                            <div class="flex items-center">
+                                <div class="h-1 bg-red-400 opacity-40" style="width:33.33%;margin-left:0"></div>
+                                <span class="text-[8px] text-red-400 ml-1 font-bold">33.33% limit</span>
+                            </div>
+                        </div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+                <?php endforeach; ?>
+            </div>
+            <?php endif; ?>
+        </div>
+        <!-- END MY ATTENDANCE -->
+
     <div id="chatbot-container">
         <div id="chatbot-window">
             <div id="chatbot-header">
@@ -1297,6 +1443,7 @@ if (!empty($enrolled_ids)) {
             if (viewId === 'assignments') document.getElementById('nav-assignments').classList.add('sidebar-active');
             if (viewId === 'my-units') document.getElementById('nav-my-units').classList.add('sidebar-active');
             if (viewId === 'my-results') document.getElementById('nav-my-results').classList.add('sidebar-active');
+            if (viewId === 'my-attendance') document.getElementById('nav-my-attendance').classList.add('sidebar-active');
             
             document.getElementById('page-title').innerText = viewId.replace('-', ' ').toUpperCase();
         }

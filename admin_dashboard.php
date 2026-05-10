@@ -49,8 +49,10 @@ $filter = $_GET['filter'] ?? 'all';
 </head>
 <body class="bg-slate-50 flex">
 
-    <nav class="w-64 h-screen bg-slate-900 text-white p-6 space-y-8 sticky top-0 flex flex-col">
-        <div class="flex items-center space-x-3 px-2">
+    <nav class="w-64 h-screen bg-slate-900 text-white flex flex-col sticky top-0 flex-shrink-0">
+
+        <!-- Logo — fixed at top -->
+        <div class="flex items-center space-x-3 px-6 py-5 flex-shrink-0">
             <div class="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
                 <i class="fa-solid fa-shield-halved text-white text-lg"></i>
             </div>
@@ -60,55 +62,59 @@ $filter = $_GET['filter'] ?? 'all';
             </div>
         </div>
 
-        <div class="space-y-1">
-            <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest px-3 mb-2">Main Menu</p>
+        <!-- Scrollable nav items -->
+        <div class="flex-1 overflow-y-auto px-4 pb-2 space-y-1">
+            <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest px-3 mb-2 pt-1">Main Menu</p>
             <a href="?view=dashboard" class="flex items-center space-x-3 p-3 rounded-xl transition-all <?php echo $view == 'dashboard' ? 'bg-blue-600 shadow-lg shadow-blue-600/30' : 'hover:bg-slate-800 text-slate-400'; ?>">
-                <i class="fa-solid fa-chart-pie"></i>
+                <i class="fa-solid fa-chart-pie w-4"></i>
                 <span class="text-sm font-bold">General Insights</span>
             </a>
             <a href="?view=users" class="flex items-center space-x-3 p-3 rounded-xl transition-all <?php echo $view == 'users' ? 'bg-blue-600 shadow-lg shadow-blue-600/30' : 'hover:bg-slate-800 text-slate-400'; ?>">
-                <i class="fa-solid fa-user-gear"></i>
+                <i class="fa-solid fa-user-gear w-4"></i>
                 <span class="text-sm font-bold">Manage Users</span>
             </a>
             <a href="?view=courses" class="flex items-center space-x-3 p-3 rounded-xl transition-all <?php echo $view == 'courses' ? 'bg-blue-600 shadow-lg shadow-blue-600/30' : 'hover:bg-slate-800 text-slate-400'; ?>">
-                <i class="fa-solid fa-book-open"></i>
+                <i class="fa-solid fa-book-open w-4"></i>
                 <span class="text-sm font-bold">Course Catalog</span>
             </a>
             <a href="?view=marks" class="flex items-center space-x-3 p-3 rounded-xl transition-all <?php echo $view == 'marks' ? 'bg-blue-600 shadow-lg shadow-blue-600/30' : 'hover:bg-slate-800 text-slate-400'; ?>">
-                <i class="fa-solid fa-clipboard-list"></i>
+                <i class="fa-solid fa-clipboard-list w-4"></i>
                 <span class="text-sm font-bold">Student Marks</span>
             </a>
-        </div>
-
-        <div class="space-y-1 pt-4 border-t border-slate-800">
-            <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest px-3 mb-2">Student Health</p>
-            
-            <a href="?view=performance&filter=excelling" class="flex items-center justify-between p-3 rounded-xl hover:bg-slate-800 group transition-all">
-                <div class="flex items-center space-x-3">
-                    <i class="fa-solid fa-crown text-emerald-500"></i>
-                    <span class="text-sm font-medium text-slate-300">Doing Well</span>
-                </div>
-                <span class="text-[10px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded-full font-bold"><?php echo $excellingCount; ?></span>
+            <a href="?view=attendance" class="flex items-center space-x-3 p-3 rounded-xl transition-all <?php echo $view == 'attendance' ? 'bg-blue-600 shadow-lg shadow-blue-600/30' : 'hover:bg-slate-800 text-slate-400'; ?>">
+                <i class="fa-solid fa-calendar-check w-4"></i>
+                <span class="text-sm font-bold">Attendance</span>
             </a>
 
-            <a href="?view=performance&filter=risk" class="flex items-center justify-between p-3 rounded-xl hover:bg-slate-800 group transition-all">
-                <div class="flex items-center space-x-3">
-                    <i class="fa-solid fa-triangle-exclamation text-rose-500"></i>
-                    <span class="text-sm font-medium text-slate-300">At Risk</span>
-                </div>
-                <span class="text-[10px] bg-rose-500/10 text-rose-400 px-2 py-0.5 rounded-full font-bold"><?php echo $riskCount; ?></span>
-            </a>
+            <div class="pt-3 mt-2 border-t border-slate-800">
+                <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest px-3 mb-2">Student Health</p>
+                <a href="?view=performance&filter=excelling" class="flex items-center justify-between p-3 rounded-xl hover:bg-slate-800 group transition-all">
+                    <div class="flex items-center space-x-3">
+                        <i class="fa-solid fa-crown text-emerald-500 w-4"></i>
+                        <span class="text-sm font-medium text-slate-300">Doing Well</span>
+                    </div>
+                    <span class="text-[10px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded-full font-bold"><?php echo $excellingCount; ?></span>
+                </a>
+                <a href="?view=performance&filter=risk" class="flex items-center justify-between p-3 rounded-xl hover:bg-slate-800 group transition-all">
+                    <div class="flex items-center space-x-3">
+                        <i class="fa-solid fa-triangle-exclamation text-rose-500 w-4"></i>
+                        <span class="text-sm font-medium text-slate-300">At Risk</span>
+                    </div>
+                    <span class="text-[10px] bg-rose-500/10 text-rose-400 px-2 py-0.5 rounded-full font-bold"><?php echo $riskCount; ?></span>
+                </a>
+            </div>
         </div>
 
-        <div class="mt-auto">
-            <a href="logout.php" class="flex items-center space-x-3 p-3 rounded-xl hover:bg-rose-500/10 text-rose-400 transition-all font-bold text-sm">
-                <i class="fa-solid fa-power-off"></i>
+        <!-- Sign-out — always pinned at bottom -->
+        <div class="flex-shrink-0 px-4 py-4 border-t border-slate-800">
+            <a href="logout.php" class="flex items-center space-x-3 p-3 rounded-xl hover:bg-rose-500/10 text-rose-400 transition-all font-bold text-sm w-full">
+                <i class="fa-solid fa-right-from-bracket w-4"></i>
                 <span>Sign Out</span>
             </a>
         </div>
     </nav>
 
-    <main class="flex-1 p-10 overflow-y-auto">
+    <main class="flex-1 overflow-y-auto <?php echo $view === 'attendance' ? 'p-0 flex flex-col' : 'p-10'; ?>">
         <header class="flex justify-between items-center mb-10">
             <div>
                 <h2 class="text-2xl font-black text-slate-800">Admin Overview</h2>
@@ -832,6 +838,477 @@ $filter = $_GET['filter'] ?? 'all';
 
 
         <?php endif; /* end view==marks */ ?>
+
+        <?php if ($view == 'attendance'):
+        // ═══════════════════════════════════════════════════
+        //  ATTENDANCE — ADMIN VIEW  (register grid layout)
+        // ═══════════════════════════════════════════════════
+
+        mysqli_query($conn, "CREATE TABLE IF NOT EXISTS `attendance_sessions` (
+          `id` INT(11) NOT NULL AUTO_INCREMENT, `unit_id` INT(11) NOT NULL,
+          `lecturer_id` INT(11) NOT NULL, `session_date` DATE NOT NULL,
+          `title` VARCHAR(255) NOT NULL DEFAULT 'Lecture',
+          `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (`id`), UNIQUE KEY `uq_unit_date` (`unit_id`,`session_date`),
+          KEY(`unit_id`), KEY(`lecturer_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        mysqli_query($conn, "CREATE TABLE IF NOT EXISTS `attendance_records` (
+          `id` INT(11) NOT NULL AUTO_INCREMENT, `session_id` INT(11) NOT NULL,
+          `student_id` INT(11) NOT NULL, `status` ENUM('present','absent') NOT NULL DEFAULT 'absent',
+          `marked_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          PRIMARY KEY (`id`), UNIQUE KEY `uq_ses_stu` (`session_id`,`student_id`), KEY(`student_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // ── Selected unit ──────────────────────────────────────────────────
+        $adm_unit_id = isset($_GET['att_unit']) ? intval($_GET['att_unit']) : 0;
+
+        // ── All units, grouped by course ───────────────────────────────────
+        $adm_units_res = mysqli_query($conn,
+            "SELECT cu.id, cu.title, cu.unit_code,
+                    c.id AS course_id, c.title AS course_title,
+                    u.full_name AS lecturer_name,
+                    COUNT(DISTINCT ats.id)          AS session_count,
+                    COUNT(DISTINCT ur.student_id)   AS enrolled_count
+             FROM course_units cu
+             JOIN courses c ON c.id = cu.course_id
+             LEFT JOIN users u ON u.id = cu.lecturer_id
+             LEFT JOIN attendance_sessions ats ON ats.unit_id = cu.id
+             LEFT JOIN unit_registrations ur ON ur.unit_id = cu.id
+             GROUP BY cu.id, cu.title, cu.unit_code, c.id, c.title, u.full_name
+             ORDER BY c.title ASC, cu.title ASC"
+        );
+        $adm_units = [];
+        $adm_courses_map = []; // course_id => [course_title, units[]]
+        while ($au = mysqli_fetch_assoc($adm_units_res)) {
+            $adm_units[] = $au;
+            $cid = $au['course_id'];
+            if (!isset($adm_courses_map[$cid])) {
+                $adm_courses_map[$cid] = ['title' => $au['course_title'], 'units' => []];
+            }
+            $adm_courses_map[$cid]['units'][] = $au;
+        }
+
+        if (!$adm_unit_id && count($adm_units)) $adm_unit_id = intval($adm_units[0]['id']);
+        $adm_sel_unit = null;
+        foreach ($adm_units as $au) { if (intval($au['id']) === $adm_unit_id) { $adm_sel_unit = $au; break; } }
+
+        // ── Sessions for selected unit (cols of the grid) ──────────────────
+        $adm_sessions = [];
+        if ($adm_unit_id) {
+            $sr = mysqli_query($conn,
+                "SELECT id, title, session_date
+                 FROM attendance_sessions
+                 WHERE unit_id = $adm_unit_id
+                 ORDER BY session_date ASC"
+            );
+            while ($s = mysqli_fetch_assoc($sr)) $adm_sessions[] = $s;
+        }
+
+        // ── Students registered for selected unit (rows of the grid) ────────
+        $adm_students = [];
+        if ($adm_unit_id) {
+            $str = mysqli_query($conn,
+                "SELECT u.id, u.full_name
+                 FROM unit_registrations ur
+                 JOIN users u ON u.id = ur.student_id
+                 WHERE ur.unit_id = $adm_unit_id
+                 ORDER BY u.full_name ASC"
+            );
+            while ($st = mysqli_fetch_assoc($str)) $adm_students[] = $st;
+        }
+
+        // ── Attendance records — build a lookup [session_id][student_id] ───
+        $adm_lookup = []; // [session_id][student_id] = 'present'|'absent'
+        if ($adm_unit_id && !empty($adm_sessions)) {
+            $sess_ids = implode(',', array_column($adm_sessions, 'id'));
+            $rr = mysqli_query($conn,
+                "SELECT session_id, student_id, status
+                 FROM attendance_records
+                 WHERE session_id IN ($sess_ids)"
+            );
+            while ($rec = mysqli_fetch_assoc($rr)) {
+                $adm_lookup[$rec['session_id']][$rec['student_id']] = $rec['status'];
+            }
+        }
+
+        // ── Per-student summary ─────────────────────────────────────────────
+        // absent_pct = absences / total_sessions * 100
+        $total_sess_count = count($adm_sessions);
+
+        // ── Global stats across all units ──────────────────────────────────
+        $overall = mysqli_fetch_assoc(mysqli_query($conn,
+            "SELECT COUNT(DISTINCT ats.id) AS total_sessions,
+                    COUNT(DISTINCT ar.student_id) AS total_students_tracked,
+                    SUM(CASE WHEN ar.status='present' THEN 1 ELSE 0 END) AS total_present,
+                    SUM(CASE WHEN ar.status='absent'  THEN 1 ELSE 0 END) AS total_absent
+             FROM attendance_sessions ats
+             LEFT JOIN attendance_records ar ON ar.session_id = ats.id"
+        )) ?: ['total_sessions'=>0,'total_students_tracked'=>0,'total_present'=>0,'total_absent'=>0];
+
+        $total_records_g    = intval($overall['total_present']) + intval($overall['total_absent']);
+        $global_attend_pct  = $total_records_g > 0
+            ? round(intval($overall['total_present']) / $total_records_g * 100, 1) : 0;
+
+        $barred_global_res = mysqli_query($conn,
+            "SELECT COUNT(*) AS cnt FROM (
+               SELECT ur.student_id, ur.unit_id
+               FROM unit_registrations ur
+               LEFT JOIN attendance_sessions ats ON ats.unit_id = ur.unit_id
+               LEFT JOIN attendance_records  ar  ON ar.session_id = ats.id AND ar.student_id = ur.student_id
+               GROUP BY ur.student_id, ur.unit_id
+               HAVING COUNT(DISTINCT ats.id) > 0
+                  AND ROUND(SUM(CASE WHEN ar.status='absent' THEN 1 ELSE 0 END)
+                            / COUNT(DISTINCT ats.id)*100,1) > 33.33
+             ) x"
+        );
+        $barred_global = mysqli_fetch_assoc($barred_global_res)['cnt'] ?? 0;
+        ?>
+
+        <!-- ─── ADMIN ATTENDANCE ──────────────────────────────────────────── -->
+        <div class="flex flex-col h-full">
+
+            <!-- ── Top bar ── -->
+            <div class="px-8 pt-7 pb-5 border-b border-slate-100 bg-white flex flex-col lg:flex-row lg:items-center justify-between gap-4 flex-shrink-0">
+                <div>
+                    <h2 class="text-xl font-black text-slate-900">Attendance Register</h2>
+                    <p class="text-slate-400 text-xs mt-0.5">Click any unit to view its full attendance register. Students above 33.33% absences are barred.</p>
+                </div>
+                <!-- Global quick stats -->
+                <div class="flex items-center gap-3 flex-wrap">
+                    <div class="flex items-center gap-2 bg-slate-50 rounded-xl px-4 py-2.5 border border-slate-100">
+                        <i class="fa-solid fa-calendar-days text-blue-500 text-sm"></i>
+                        <div>
+                            <p class="text-[9px] font-black uppercase text-slate-400 leading-none">Sessions</p>
+                            <p class="text-sm font-black text-slate-800"><?php echo intval($overall['total_sessions']); ?></p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 bg-slate-50 rounded-xl px-4 py-2.5 border border-slate-100">
+                        <i class="fa-solid fa-users text-indigo-500 text-sm"></i>
+                        <div>
+                            <p class="text-[9px] font-black uppercase text-slate-400 leading-none">Tracked</p>
+                            <p class="text-sm font-black text-slate-800"><?php echo intval($overall['total_students_tracked']); ?></p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 bg-slate-50 rounded-xl px-4 py-2.5 border border-slate-100">
+                        <i class="fa-solid fa-chart-line text-emerald-500 text-sm"></i>
+                        <div>
+                            <p class="text-[9px] font-black uppercase text-slate-400 leading-none">Avg Attendance</p>
+                            <p class="text-sm font-black <?php echo $global_attend_pct>=70?'text-emerald-600':($global_attend_pct>=50?'text-amber-600':'text-red-600'); ?>"><?php echo $global_attend_pct; ?>%</p>
+                        </div>
+                    </div>
+                    <?php if ($barred_global > 0): ?>
+                    <div class="flex items-center gap-2 bg-red-50 rounded-xl px-4 py-2.5 border border-red-200">
+                        <i class="fa-solid fa-ban text-red-500 text-sm"></i>
+                        <div>
+                            <p class="text-[9px] font-black uppercase text-red-400 leading-none">Barred</p>
+                            <p class="text-sm font-black text-red-600"><?php echo $barred_global; ?></p>
+                        </div>
+                    </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <?php if (empty($adm_units)): ?>
+            <div class="flex-1 flex items-center justify-center p-12">
+                <div class="text-center">
+                    <i class="fa-solid fa-calendar-xmark text-slate-200 text-6xl mb-4 block"></i>
+                    <p class="text-slate-400 font-bold">No units found in the system.</p>
+                </div>
+            </div>
+            <?php else: ?>
+
+            <div class="flex flex-1 overflow-hidden">
+
+                <!-- ── LEFT: Unit browser grouped by course ── -->
+                <div class="w-64 flex-shrink-0 border-r border-slate-100 overflow-y-auto bg-slate-50">
+                    <?php foreach ($adm_courses_map as $cid => $course): ?>
+                    <div class="pt-4">
+                        <!-- Course heading -->
+                        <p class="px-4 pb-2 text-[9px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-200">
+                            <i class="fa-solid fa-book-open mr-1 text-blue-400"></i>
+                            <?php echo htmlspecialchars($course['title']); ?>
+                        </p>
+                        <?php foreach ($course['units'] as $au): ?>
+                        <?php $isActive = (intval($au['id']) === $adm_unit_id); ?>
+                        <a href="?view=attendance&att_unit=<?php echo $au['id']; ?>"
+                           class="flex items-start gap-3 px-4 py-3 border-b border-slate-100 transition-all
+                                  <?php echo $isActive
+                                      ? 'bg-blue-600 text-white'
+                                      : 'hover:bg-white text-slate-600 hover:text-slate-900'; ?>">
+                            <div class="w-7 h-7 rounded-lg flex-shrink-0 flex items-center justify-center mt-0.5
+                                        <?php echo $isActive ? 'bg-white/20' : 'bg-blue-50'; ?>">
+                                <i class="fa-solid fa-layer-group text-[10px] <?php echo $isActive ? 'text-white' : 'text-blue-500'; ?>"></i>
+                            </div>
+                            <div class="overflow-hidden">
+                                <p class="text-xs font-bold leading-tight truncate"><?php echo htmlspecialchars($au['title']); ?></p>
+                                <?php if ($au['unit_code']): ?>
+                                <p class="text-[9px] mt-0.5 <?php echo $isActive ? 'text-blue-200' : 'text-slate-400'; ?>"><?php echo htmlspecialchars($au['unit_code']); ?></p>
+                                <?php endif; ?>
+                                <p class="text-[9px] mt-0.5 <?php echo $isActive ? 'text-blue-200' : 'text-slate-400'; ?>">
+                                    <?php echo intval($au['session_count']); ?> session<?php echo $au['session_count'] != 1 ? 's' : ''; ?> ·
+                                    <?php echo intval($au['enrolled_count']); ?> student<?php echo $au['enrolled_count'] != 1 ? 's' : ''; ?>
+                                </p>
+                            </div>
+                        </a>
+                        <?php endforeach; ?>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+
+                <!-- ── RIGHT: Attendance register for selected unit ── -->
+                <div class="flex-1 overflow-auto p-6">
+
+                <?php if ($adm_sel_unit): ?>
+
+                    <!-- Unit title bar -->
+                    <div class="flex items-start justify-between mb-5 gap-4 flex-wrap">
+                        <div>
+                            <div class="flex items-center gap-2 mb-1">
+                                <h3 class="text-lg font-black text-slate-900"><?php echo htmlspecialchars($adm_sel_unit['title']); ?></h3>
+                                <?php if ($adm_sel_unit['unit_code']): ?>
+                                <span class="text-[9px] font-black bg-blue-100 text-blue-700 px-2 py-0.5 rounded-md"><?php echo htmlspecialchars($adm_sel_unit['unit_code']); ?></span>
+                                <?php endif; ?>
+                            </div>
+                            <p class="text-slate-400 text-xs">
+                                <span class="font-bold text-slate-500"><?php echo htmlspecialchars($adm_sel_unit['course_title']); ?></span>
+                                &nbsp;·&nbsp; Lecturer: <?php echo htmlspecialchars($adm_sel_unit['lecturer_name'] ?? 'Unassigned'); ?>
+                            </p>
+                        </div>
+                        <!-- Quick unit stats -->
+                        <div class="flex gap-3 flex-wrap">
+                            <div class="text-center bg-white border border-slate-100 shadow-sm rounded-xl px-4 py-2">
+                                <p class="text-lg font-black text-slate-900"><?php echo $total_sess_count; ?></p>
+                                <p class="text-[9px] uppercase font-black text-slate-400">Sessions</p>
+                            </div>
+                            <div class="text-center bg-white border border-slate-100 shadow-sm rounded-xl px-4 py-2">
+                                <p class="text-lg font-black text-slate-900"><?php echo count($adm_students); ?></p>
+                                <p class="text-[9px] uppercase font-black text-slate-400">Students</p>
+                            </div>
+                            <?php
+                            // Compute barred count for this unit
+                            $unit_barred = 0;
+                            foreach ($adm_students as $st) {
+                                if ($total_sess_count === 0) continue;
+                                $absent_cnt = 0;
+                                foreach ($adm_sessions as $sess) {
+                                    $status = $adm_lookup[$sess['id']][$st['id']] ?? 'absent';
+                                    if ($status === 'absent') $absent_cnt++;
+                                }
+                                if (($absent_cnt / $total_sess_count * 100) > 33.33) $unit_barred++;
+                            }
+                            ?>
+                            <?php if ($unit_barred > 0): ?>
+                            <div class="text-center bg-red-50 border border-red-200 shadow-sm rounded-xl px-4 py-2">
+                                <p class="text-lg font-black text-red-600"><?php echo $unit_barred; ?></p>
+                                <p class="text-[9px] uppercase font-black text-red-400">Barred</p>
+                            </div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+
+                    <?php if (empty($adm_sessions) && empty($adm_students)): ?>
+                    <!-- No data at all -->
+                    <div class="bg-white border border-dashed border-slate-200 rounded-2xl p-16 text-center">
+                        <i class="fa-solid fa-calendar-xmark text-slate-200 text-5xl mb-4 block"></i>
+                        <p class="text-slate-500 font-bold text-sm">No attendance data yet for this unit.</p>
+                        <p class="text-slate-400 text-xs mt-1">The lecturer needs to create sessions and mark attendance first.</p>
+                    </div>
+
+                    <?php elseif (empty($adm_sessions)): ?>
+                    <!-- Students registered but no sessions -->
+                    <div class="bg-amber-50 border border-amber-200 rounded-2xl p-10 text-center">
+                        <i class="fa-solid fa-calendar-plus text-amber-400 text-4xl mb-3 block"></i>
+                        <p class="text-amber-700 font-bold text-sm"><?php echo count($adm_students); ?> student(s) registered — no sessions recorded yet.</p>
+                        <p class="text-amber-500 text-xs mt-1">The lecturer for this unit has not created any attendance sessions.</p>
+                    </div>
+
+                    <?php else: ?>
+                    <!-- ── THE ATTENDANCE REGISTER GRID ── -->
+                    <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+
+                        <!-- Legend -->
+                        <div class="px-5 py-3 bg-slate-50 border-b border-slate-100 flex items-center justify-between flex-wrap gap-3">
+                            <p class="text-[10px] font-black uppercase text-slate-500">
+                                <i class="fa-solid fa-table-list text-blue-400 mr-1"></i>
+                                Attendance Register — <?php echo $total_sess_count; ?> session<?php echo $total_sess_count!=1?'s':''; ?>
+                            </p>
+                            <div class="flex items-center gap-4 text-[10px] font-bold text-slate-500">
+                                <span class="flex items-center gap-1">
+                                    <span class="w-5 h-5 rounded-md bg-emerald-100 flex items-center justify-center text-emerald-600 font-black text-[10px]">P</span> Present
+                                </span>
+                                <span class="flex items-center gap-1">
+                                    <span class="w-5 h-5 rounded-md bg-red-100 flex items-center justify-center text-red-500 font-black text-[10px]">A</span> Absent
+                                </span>
+                                <span class="flex items-center gap-1">
+                                    <span class="w-5 h-5 rounded-md bg-slate-100 flex items-center justify-center text-slate-400 font-black text-[10px]">—</span> No record
+                                </span>
+                                <span class="text-red-500"><i class="fa-solid fa-ban mr-1"></i>&gt;33.33% absent = BARRED</span>
+                            </div>
+                        </div>
+
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full border-collapse text-sm">
+                                <thead>
+                                    <!-- Row 1: Session titles -->
+                                    <tr class="bg-slate-50">
+                                        <th class="sticky left-0 z-10 bg-slate-50 px-5 py-3 text-left text-[10px] font-black uppercase text-slate-400 border-b border-r border-slate-200 min-w-[180px]">
+                                            Student
+                                        </th>
+                                        <?php foreach ($adm_sessions as $sess): ?>
+                                        <th class="px-3 py-3 text-center border-b border-r border-slate-100 min-w-[90px] align-bottom">
+                                            <div class="flex flex-col items-center gap-1">
+                                                <span class="text-[9px] font-black text-slate-500 uppercase leading-tight"><?php echo htmlspecialchars($sess['title']); ?></span>
+                                                <span class="text-[10px] font-black text-slate-700"><?php echo date('d M', strtotime($sess['session_date'])); ?></span>
+                                                <span class="text-[9px] text-slate-400"><?php echo date('D', strtotime($sess['session_date'])); ?></span>
+                                            </div>
+                                        </th>
+                                        <?php endforeach; ?>
+                                        <!-- Summary columns -->
+                                        <th class="px-3 py-3 text-center border-b border-r border-slate-200 bg-slate-100 min-w-[70px] text-[9px] font-black uppercase text-slate-500">Attended</th>
+                                        <th class="px-3 py-3 text-center border-b border-r border-slate-200 bg-slate-100 min-w-[70px] text-[9px] font-black uppercase text-slate-500">Absent</th>
+                                        <th class="px-3 py-3 text-center border-b border-r border-slate-200 bg-slate-100 min-w-[80px] text-[9px] font-black uppercase text-slate-500">Absence %</th>
+                                        <th class="px-3 py-3 text-center border-b border-slate-200 bg-slate-100 min-w-[100px] text-[9px] font-black uppercase text-slate-500">Exam Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                <?php
+                                $col_present_totals = array_fill_keys(array_column($adm_sessions,'id'), 0);
+                                $col_absent_totals  = array_fill_keys(array_column($adm_sessions,'id'), 0);
+
+                                foreach ($adm_students as $st):
+                                    $attended   = 0;
+                                    $absent_cnt = 0;
+
+                                    foreach ($adm_sessions as $sess) {
+                                        $status = $adm_lookup[$sess['id']][$st['id']] ?? null;
+                                        if ($status === 'present') { $attended++; $col_present_totals[$sess['id']]++; }
+                                        elseif ($status === 'absent') { $absent_cnt++; $col_absent_totals[$sess['id']]++; }
+                                        else { $absent_cnt++; $col_absent_totals[$sess['id']]++; } // no record = absent
+                                    }
+
+                                    $absence_pct = $total_sess_count > 0 ? round($absent_cnt / $total_sess_count * 100, 1) : 0;
+                                    $is_barred   = $total_sess_count > 0 && $absence_pct > 33.33;
+                                    $row_bg      = $is_barred ? 'bg-red-50/40' : 'bg-white';
+                                ?>
+                                <tr class="<?php echo $row_bg; ?> hover:bg-blue-50/30 transition-colors border-b border-slate-100 group">
+                                    <!-- Student name — sticky -->
+                                    <td class="sticky left-0 z-10 <?php echo $is_barred ? 'bg-red-50' : 'bg-white group-hover:bg-blue-50/30'; ?> px-5 py-3 border-r border-slate-200 transition-colors">
+                                        <div class="flex items-center gap-2">
+                                            <div class="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-400 to-purple-500 flex items-center justify-center flex-shrink-0">
+                                                <span class="text-[10px] font-black text-white"><?php echo strtoupper(substr($st['full_name'],0,1)); ?></span>
+                                            </div>
+                                            <span class="font-bold text-slate-800 text-xs leading-tight"><?php echo htmlspecialchars($st['full_name']); ?></span>
+                                        </div>
+                                    </td>
+
+                                    <!-- Session cells -->
+                                    <?php foreach ($adm_sessions as $sess):
+                                        $status = $adm_lookup[$sess['id']][$st['id']] ?? null;
+                                    ?>
+                                    <td class="px-2 py-3 text-center border-r border-slate-100">
+                                        <?php if ($status === 'present'): ?>
+                                        <span class="inline-flex w-7 h-7 rounded-md bg-emerald-100 items-center justify-center mx-auto" title="Present">
+                                            <span class="text-[11px] font-black text-emerald-600">P</span>
+                                        </span>
+                                        <?php elseif ($status === 'absent'): ?>
+                                        <span class="inline-flex w-7 h-7 rounded-md bg-red-100 items-center justify-center mx-auto" title="Absent">
+                                            <span class="text-[11px] font-black text-red-500">A</span>
+                                        </span>
+                                        <?php else: ?>
+                                        <span class="inline-flex w-7 h-7 rounded-md bg-slate-100 items-center justify-center mx-auto" title="No record">
+                                            <span class="text-[11px] font-black text-slate-400">—</span>
+                                        </span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <?php endforeach; ?>
+
+                                    <!-- Summary cells -->
+                                    <td class="px-3 py-3 text-center bg-emerald-50/50 border-r border-slate-200">
+                                        <span class="text-xs font-black text-emerald-700"><?php echo $attended; ?></span>
+                                    </td>
+                                    <td class="px-3 py-3 text-center bg-red-50/50 border-r border-slate-200">
+                                        <span class="text-xs font-black text-red-600"><?php echo $absent_cnt; ?></span>
+                                    </td>
+                                    <td class="px-3 py-3 text-center bg-slate-50 border-r border-slate-200">
+                                        <?php if ($total_sess_count > 0): ?>
+                                        <div class="flex flex-col items-center gap-1">
+                                            <span class="text-xs font-black <?php echo $is_barred?'text-red-600':($absence_pct>20?'text-amber-600':'text-slate-700'); ?>"><?php echo $absence_pct; ?>%</span>
+                                            <div class="w-12 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                                                <div class="h-full rounded-full <?php echo $is_barred?'bg-red-500':($absence_pct>20?'bg-amber-400':'bg-emerald-400'); ?>"
+                                                     style="width:<?php echo min(100,$absence_pct); ?>%"></div>
+                                            </div>
+                                        </div>
+                                        <?php else: ?><span class="text-slate-300 text-xs">—</span><?php endif; ?>
+                                    </td>
+                                    <td class="px-3 py-3 text-center bg-slate-50">
+                                        <?php if ($total_sess_count === 0): ?>
+                                        <span class="text-[9px] font-black text-slate-300 border border-slate-200 px-2 py-1 rounded-lg">No Data</span>
+                                        <?php elseif ($is_barred): ?>
+                                        <span class="text-[9px] font-black text-red-600 bg-red-100 border border-red-200 px-2 py-1 rounded-lg whitespace-nowrap">
+                                            <i class="fa-solid fa-ban mr-0.5"></i>BARRED
+                                        </span>
+                                        <?php else: ?>
+                                        <span class="text-[9px] font-black text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-1 rounded-lg whitespace-nowrap">
+                                            <i class="fa-solid fa-circle-check mr-0.5"></i>Eligible
+                                        </span>
+                                        <?php endif; ?>
+                                    </td>
+                                </tr>
+                                <?php endforeach; ?>
+
+                                <!-- ── Footer totals row ── -->
+                                <?php if (!empty($adm_students)): ?>
+                                <tr class="bg-slate-100 border-t-2 border-slate-300 font-black">
+                                    <td class="sticky left-0 z-10 bg-slate-100 px-5 py-3 text-[10px] uppercase font-black text-slate-500 border-r border-slate-300">
+                                        Session Totals
+                                    </td>
+                                    <?php foreach ($adm_sessions as $sess):
+                                        $p = $col_present_totals[$sess['id']];
+                                        $a = $col_absent_totals[$sess['id']];
+                                        $t = $p + $a;
+                                        $sp = $t > 0 ? round($p/$t*100) : 0;
+                                    ?>
+                                    <td class="px-2 py-3 text-center border-r border-slate-200">
+                                        <div class="flex flex-col items-center gap-0.5">
+                                            <span class="text-[10px] font-black text-slate-700"><?php echo $p; ?>/<?php echo $t; ?></span>
+                                            <span class="text-[9px] font-bold <?php echo $sp>=70?'text-emerald-600':($sp>=50?'text-amber-600':'text-red-600'); ?>"><?php echo $sp; ?>%</span>
+                                        </div>
+                                    </td>
+                                    <?php endforeach; ?>
+                                    <td class="px-3 py-3 bg-emerald-100 border-r border-slate-300" colspan="1"></td>
+                                    <td class="px-3 py-3 bg-red-100 border-r border-slate-300" colspan="1"></td>
+                                    <td class="px-3 py-3 border-r border-slate-300" colspan="1"></td>
+                                    <td class="px-3 py-3" colspan="1">
+                                        <?php if ($unit_barred > 0): ?>
+                                        <span class="text-[9px] font-black text-red-600"><?php echo $unit_barred; ?> barred</span>
+                                        <?php else: ?>
+                                        <span class="text-[9px] font-black text-emerald-600">All eligible</span>
+                                        <?php endif; ?>
+                                    </td>
+                                </tr>
+                                <?php endif; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <?php endif; /* sessions exist */ ?>
+
+                <?php else: ?>
+                    <!-- No unit selected -->
+                    <div class="flex items-center justify-center h-full">
+                        <div class="text-center py-20">
+                            <i class="fa-solid fa-hand-pointer text-slate-200 text-6xl mb-4 block"></i>
+                            <p class="text-slate-400 font-bold">Select a unit from the left panel</p>
+                            <p class="text-slate-300 text-xs mt-1">to view its attendance register</p>
+                        </div>
+                    </div>
+                <?php endif; /* adm_sel_unit */ ?>
+                </div>
+            </div>
+
+            <?php endif; /* adm_units */ ?>
+        </div>
+        <?php endif; /* end view==attendance */ ?>
 
         <?php if ($view == 'performance'):
             $is_excelling  = ($filter === 'excelling');

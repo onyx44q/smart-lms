@@ -200,57 +200,62 @@ $avgMastery = $decisionData['class_avg'] ?? 0; // combined quiz+exam avg from de
 <body class="bg-[#f8fafc] flex min-h-screen text-slate-900">
 
     <!-- ── SIDEBAR ── -->
-    <nav class="w-20 lg:w-64 h-screen bg-slate-900 text-white flex flex-col items-center lg:items-start p-6 sticky top-0 z-40 transition-all duration-300">
-        <div class="flex items-center space-x-3 mb-12">
-            <div class="h-10 w-10 bg-indigo-500 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/40">
+    <nav class="w-20 lg:w-64 h-screen bg-slate-900 text-white flex flex-col items-center lg:items-start sticky top-0 z-40 flex-shrink-0">
+
+        <!-- Logo — fixed top -->
+        <div class="flex items-center space-x-3 px-5 py-5 flex-shrink-0 w-full">
+            <div class="h-10 w-10 bg-indigo-500 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/40 flex-shrink-0">
                 <i class="fa-solid fa-bolt text-white"></i>
             </div>
             <h2 class="text-xl font-extrabold tracking-tight hidden lg:block">Smart<span class="text-indigo-400">LMS</span></h2>
         </div>
 
-        <div class="flex-1 w-full space-y-2">
-            <a href="lecturer_dashboard.php" class="flex items-center space-x-4 p-3 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 group">
-                <i class="fa-solid fa-house-chimney text-lg"></i>
-                <span class="font-semibold hidden lg:block">Overview</span>
+        <!-- Scrollable nav items -->
+        <div class="flex-1 overflow-y-auto w-full px-3 space-y-1 pb-2">
+            <a href="lecturer_dashboard.php" class="flex items-center space-x-4 p-3 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 group w-full">
+                <i class="fa-solid fa-house-chimney text-lg flex-shrink-0"></i>
+                <span class="font-semibold hidden lg:block truncate">Overview</span>
             </a>
 
-            <a href="quiz_panel.php" class="flex items-center space-x-4 p-3 rounded-xl text-slate-400 hover:bg-slate-800 transition group">
-                <i class="fa-solid fa-brain text-lg group-hover:text-white"></i>
-                <span class="font-medium hidden lg:block group-hover:text-white">Quiz Manager</span>
+            <a href="quiz_panel.php" class="flex items-center space-x-4 p-3 rounded-xl text-slate-400 hover:bg-slate-800 transition group w-full">
+                <i class="fa-solid fa-brain text-lg flex-shrink-0 group-hover:text-white"></i>
+                <span class="font-medium hidden lg:block group-hover:text-white truncate">Quiz Manager</span>
             </a>
 
-            <!-- My Schedule — NEW -->
-            <a href="?view=schedule" class="flex items-center space-x-4 p-3 rounded-xl <?php echo (($_GET['view'] ?? '') === 'schedule') ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : 'text-slate-400 hover:bg-slate-800'; ?> transition group">
-                <i class="fa-solid fa-calendar-days text-lg group-hover:text-white"></i>
-                <span class="font-medium hidden lg:block group-hover:text-white">My Schedule</span>
+            <a href="?view=schedule" class="flex items-center space-x-4 p-3 rounded-xl <?php echo (($_GET['view'] ?? '') === 'schedule') ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : 'text-slate-400 hover:bg-slate-800'; ?> transition group w-full">
+                <i class="fa-solid fa-calendar-days text-lg flex-shrink-0 group-hover:text-white"></i>
+                <span class="font-medium hidden lg:block group-hover:text-white truncate">My Schedule</span>
             </a>
 
-            <!-- Marks Manager -->
-            <a href="?view=marks" class="flex items-center space-x-4 p-3 rounded-xl <?php echo (($_GET['view'] ?? '') === 'marks') ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : 'text-slate-400 hover:bg-slate-800'; ?> transition group">
-                <i class="fa-solid fa-clipboard-list text-lg group-hover:text-white"></i>
-                <span class="font-medium hidden lg:block group-hover:text-white">Marks Manager</span>
+            <a href="?view=marks" class="flex items-center space-x-4 p-3 rounded-xl <?php echo (($_GET['view'] ?? '') === 'marks') ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : 'text-slate-400 hover:bg-slate-800'; ?> transition group w-full">
+                <i class="fa-solid fa-clipboard-list text-lg flex-shrink-0 group-hover:text-white"></i>
+                <span class="font-medium hidden lg:block group-hover:text-white truncate">Marks Manager</span>
             </a>
 
-            <!-- Assignments — NEW -->
-            <a href="?view=assignments" class="flex items-center space-x-4 p-3 rounded-xl <?php echo (($_GET['view'] ?? '') === 'assignments') ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : 'text-slate-400 hover:bg-slate-800'; ?> transition group">
-                <i class="fa-solid fa-file-pen text-lg group-hover:text-white"></i>
-                <span class="font-medium hidden lg:block group-hover:text-white">Assignments</span>
+            <a href="?view=assignments" class="flex items-center space-x-4 p-3 rounded-xl <?php echo (($_GET['view'] ?? '') === 'assignments') ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : 'text-slate-400 hover:bg-slate-800'; ?> transition group w-full">
+                <i class="fa-solid fa-file-pen text-lg flex-shrink-0 group-hover:text-white"></i>
+                <span class="font-medium hidden lg:block group-hover:text-white truncate">Assignments</span>
             </a>
-            
+
+            <a href="?view=attendance" class="flex items-center space-x-4 p-3 rounded-xl <?php echo (($_GET['view'] ?? '') === 'attendance') ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : 'text-slate-400 hover:bg-slate-800'; ?> transition group w-full">
+                <i class="fa-solid fa-calendar-check text-lg flex-shrink-0 group-hover:text-white"></i>
+                <span class="font-medium hidden lg:block group-hover:text-white truncate">Attendance</span>
+            </a>
+
             <div class="w-full">
                 <button onclick="toggleCourseDropdown()" class="w-full flex items-center justify-between p-3 rounded-xl text-slate-400 hover:bg-slate-800 transition group">
                     <div class="flex items-center space-x-4">
-                        <i class="fa-solid fa-graduation-cap text-lg group-hover:text-white"></i>
-                        <span class="font-medium hidden lg:block group-hover:text-white">My Courses</span>
+                        <i class="fa-solid fa-graduation-cap text-lg flex-shrink-0 group-hover:text-white"></i>
+                        <span class="font-medium hidden lg:block group-hover:text-white truncate">My Courses</span>
                     </div>
-                    <i class="fa-solid fa-chevron-down text-[10px] hidden lg:block"></i>
+                    <i class="fa-solid fa-chevron-down text-[10px] hidden lg:block flex-shrink-0"></i>
                 </button>
                 <div id="courseDropdown" class="pl-12 space-y-1 mt-1">
                     <?php 
                     mysqli_data_seek($courses_query, 0);
                     while($row = mysqli_fetch_assoc($courses_query)): 
                     ?>
-                        <a href="?view_course=<?php echo $row['id']; ?>" class="block py-2 text-sm text-slate-500 hover:text-indigo-400 transition-colors">
+                        <a href="?view_course=<?php echo $row['id']; ?>" class="block py-2 text-sm text-slate-500 hover:text-indigo-400 transition-colors truncate">
                             <?php echo htmlspecialchars($row['title']); ?>
                         </a>
                     <?php endwhile; ?>
@@ -258,16 +263,18 @@ $avgMastery = $decisionData['class_avg'] ?? 0; // combined quiz+exam avg from de
             </div>
         </div>
 
-        <div class="w-full pt-6 border-t border-slate-800">
-            <div class="flex items-center space-x-3 p-2">
-                <div class="h-8 w-8 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 shadow-inner"></div>
-                <div class="hidden lg:block">
-                    <p class="text-xs font-bold leading-none"><?php echo htmlspecialchars($lecturerName); ?></p>
+        <!-- Profile + Sign Out — always pinned at bottom -->
+        <div class="flex-shrink-0 w-full px-3 py-4 border-t border-slate-800">
+            <div class="flex items-center space-x-3 px-2 mb-3">
+                <div class="h-8 w-8 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 shadow-inner flex-shrink-0"></div>
+                <div class="hidden lg:block overflow-hidden">
+                    <p class="text-xs font-bold leading-none truncate"><?php echo htmlspecialchars($lecturerName); ?></p>
                     <p class="text-[10px] text-slate-500 mt-1 uppercase tracking-widest font-bold">Academic Staff</p>
                 </div>
             </div>
-            <a href="logout.php" class="block mt-4 text-center lg:text-left text-red-400 hover:text-red-300 transition text-xs font-bold">
-                <i class="fa-solid fa-power-off lg:mr-2"></i> <span class="hidden lg:inline uppercase tracking-tighter">Sign Out</span>
+            <a href="logout.php" class="flex items-center space-x-3 p-2.5 rounded-xl hover:bg-rose-500/10 text-rose-400 transition text-xs font-bold w-full">
+                <i class="fa-solid fa-right-from-bracket text-sm flex-shrink-0"></i>
+                <span class="hidden lg:inline uppercase tracking-tighter">Sign Out</span>
             </a>
         </div>
     </nav>
@@ -1346,6 +1353,394 @@ $avgMastery = $decisionData['class_avg'] ?? 0; // combined quiz+exam avg from de
             const [letter, cls] = getGrade(pct);
             gEl.textContent = letter;
             gEl.className = `inline-block border px-2.5 py-1 rounded-xl text-xs font-black ${cls}`;
+        }
+        </script>
+
+        <?php elseif(($_GET['view'] ?? '') === 'attendance'):
+        // ═══════════════════════════════════════════════════
+        //  ATTENDANCE MANAGER
+        // ═══════════════════════════════════════════════════
+
+        // Auto-create attendance tables
+        mysqli_query($conn, "CREATE TABLE IF NOT EXISTS `attendance_sessions` (
+          `id` INT(11) NOT NULL AUTO_INCREMENT, `unit_id` INT(11) NOT NULL,
+          `lecturer_id` INT(11) NOT NULL, `session_date` DATE NOT NULL,
+          `title` VARCHAR(255) NOT NULL DEFAULT 'Lecture',
+          `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (`id`), KEY(`unit_id`), KEY(`lecturer_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        mysqli_query($conn, "CREATE TABLE IF NOT EXISTS `attendance_records` (
+          `id` INT(11) NOT NULL AUTO_INCREMENT, `session_id` INT(11) NOT NULL,
+          `student_id` INT(11) NOT NULL, `status` ENUM('present','absent') NOT NULL DEFAULT 'absent',
+          `marked_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          PRIMARY KEY (`id`), UNIQUE KEY `uq_ses_stu` (`session_id`,`student_id`), KEY(`student_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // Get lecturer's units
+        $att_units_res = mysqli_query($conn,
+            "SELECT cu.id, cu.title, cu.unit_code, c.title AS course_title
+             FROM course_units cu
+             JOIN courses c ON c.id = cu.course_id
+             WHERE cu.lecturer_id = $user_id
+             ORDER BY c.title, cu.title"
+        );
+        $att_units = [];
+        while ($au = mysqli_fetch_assoc($att_units_res)) $att_units[] = $au;
+
+        $att_unit_id = isset($_GET['att_unit']) ? intval($_GET['att_unit']) : (count($att_units) > 0 ? $att_units[0]['id'] : 0);
+        $att_sel_unit = null;
+        foreach ($att_units as $au) { if ($au['id'] === $att_unit_id) { $att_sel_unit = $au; break; } }
+
+        // Sessions for the selected unit
+        $att_sessions = [];
+        if ($att_unit_id) {
+            $sr = mysqli_query($conn,
+                "SELECT ats.*, COUNT(ar.id) AS total_students,
+                        SUM(CASE WHEN ar.status='present' THEN 1 ELSE 0 END) AS present_count
+                 FROM attendance_sessions ats
+                 LEFT JOIN attendance_records ar ON ar.session_id = ats.id
+                 WHERE ats.unit_id = $att_unit_id
+                 GROUP BY ats.id
+                 ORDER BY ats.session_date DESC"
+            );
+            while ($s = mysqli_fetch_assoc($sr)) $att_sessions[] = $s;
+        }
+
+        // Per-student absence summary for the selected unit
+        $att_summary = [];
+        if ($att_unit_id) {
+            $asr = mysqli_query($conn,
+                "SELECT u.id AS student_id, u.full_name,
+                        COUNT(DISTINCT ats.id) AS total_sessions,
+                        SUM(CASE WHEN ar.status='present' THEN 1 ELSE 0 END) AS attended,
+                        SUM(CASE WHEN ar.status='absent'  THEN 1 ELSE 0 END) AS absences,
+                        ROUND(SUM(CASE WHEN ar.status='absent' THEN 1 ELSE 0 END)
+                              / NULLIF(COUNT(DISTINCT ats.id),0)*100,1) AS absence_pct
+                 FROM unit_registrations ur
+                 JOIN users u ON u.id = ur.student_id
+                 LEFT JOIN attendance_sessions ats ON ats.unit_id = $att_unit_id
+                 LEFT JOIN attendance_records  ar  ON ar.session_id = ats.id AND ar.student_id = u.id
+                 WHERE ur.unit_id = $att_unit_id
+                 GROUP BY u.id, u.full_name
+                 ORDER BY u.full_name ASC"
+            );
+            while ($arow = mysqli_fetch_assoc($asr)) {
+                $arow['barred'] = (floatval($arow['absence_pct'] ?? 0) > 33.33);
+                $att_summary[] = $arow;
+            }
+        }
+        ?>
+
+        <!-- ─── ATTENDANCE MANAGER UI ─────────────────────────────────── -->
+        <div class="p-6 lg:p-8">
+
+            <!-- Page Header -->
+            <div class="flex items-center justify-between mb-7">
+                <div>
+                    <h2 class="text-2xl font-black text-slate-900">Attendance Manager</h2>
+                    <p class="text-slate-400 text-xs mt-1">Mark and track student attendance per lecture session. Students with &gt;33.33% absences are barred from the exam.</p>
+                </div>
+            </div>
+
+            <?php if (empty($att_units)): ?>
+            <div class="bg-amber-50 border border-amber-200 rounded-2xl p-8 text-center">
+                <i class="fa-solid fa-triangle-exclamation text-amber-400 text-3xl mb-3"></i>
+                <p class="text-amber-700 font-bold">No units assigned to you yet.</p>
+                <p class="text-amber-500 text-sm mt-1">Ask your admin to assign units.</p>
+            </div>
+            <?php else: ?>
+
+            <!-- Unit Tabs -->
+            <div class="flex flex-wrap gap-2 mb-7">
+                <?php foreach ($att_units as $au): ?>
+                <a href="?view=attendance&att_unit=<?php echo $au['id']; ?>"
+                   class="px-4 py-2 rounded-xl text-xs font-black uppercase border transition-all <?php echo $au['id'] === $att_unit_id ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-200' : 'bg-white text-slate-500 border-slate-200 hover:border-indigo-300 hover:text-indigo-600'; ?>">
+                    <?php echo htmlspecialchars($au['unit_code'] ? $au['unit_code'].' — '.$au['title'] : $au['title']); ?>
+                </a>
+                <?php endforeach; ?>
+            </div>
+
+            <?php if ($att_sel_unit): ?>
+            <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+
+                <!-- LEFT: Create Session + Sessions List -->
+                <div class="xl:col-span-1 space-y-5">
+
+                    <!-- Create New Session Card -->
+                    <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                        <div class="px-5 py-4 border-b border-slate-100 bg-slate-50 flex items-center space-x-2">
+                            <i class="fa-solid fa-plus-circle text-indigo-500 text-sm"></i>
+                            <h3 class="font-black text-slate-800 text-sm">New Session</h3>
+                        </div>
+                        <div class="px-5 py-5 space-y-4">
+                            <div>
+                                <label class="text-[10px] font-black uppercase text-slate-400 block mb-1">Session Title</label>
+                                <input type="text" id="sess-title" value="Lecture" placeholder="e.g. Week 3 Lecture"
+                                    class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300">
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-black uppercase text-slate-400 block mb-1">Date</label>
+                                <input type="date" id="sess-date" value="<?php echo date('Y-m-d'); ?>"
+                                    class="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300">
+                            </div>
+                            <button onclick="createSession(<?php echo $att_unit_id; ?>)"
+                                class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase rounded-xl tracking-widest transition-all active:scale-95 shadow-lg shadow-indigo-200">
+                                <i class="fa-solid fa-calendar-plus mr-2"></i>Create Session
+                            </button>
+                            <div id="sess-msg" class="hidden text-xs text-center rounded-xl px-3 py-2"></div>
+                        </div>
+                    </div>
+
+                    <!-- Sessions List -->
+                    <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                        <div class="px-5 py-4 border-b border-slate-100 bg-slate-50">
+                            <h3 class="font-black text-slate-800 text-sm"><i class="fa-solid fa-list-check text-indigo-400 mr-2"></i>Sessions (<?php echo count($att_sessions); ?>)</h3>
+                        </div>
+                        <div class="divide-y divide-slate-50 max-h-80 overflow-y-auto">
+                            <?php if (empty($att_sessions)): ?>
+                            <p class="text-slate-400 text-xs text-center py-8 italic">No sessions yet. Create one above.</p>
+                            <?php else: ?>
+                            <?php foreach ($att_sessions as $sess): ?>
+                            <div class="px-5 py-3 flex items-center justify-between hover:bg-slate-50 cursor-pointer group"
+                                 onclick="loadSession(<?php echo $sess['id']; ?>, '<?php echo htmlspecialchars(addslashes($sess['title'])); ?>', '<?php echo $sess['session_date']; ?>')">
+                                <div>
+                                    <p class="text-xs font-bold text-slate-800 group-hover:text-indigo-600 transition-colors"><?php echo htmlspecialchars($sess['title']); ?></p>
+                                    <p class="text-[10px] text-slate-400"><?php echo date('D, d M Y', strtotime($sess['session_date'])); ?></p>
+                                    <p class="text-[10px] text-slate-400">
+                                        <span class="text-emerald-500 font-bold"><?php echo intval($sess['present_count']); ?> present</span>
+                                        / <?php echo intval($sess['total_students']); ?> students
+                                    </p>
+                                </div>
+                                <div class="flex items-center space-x-2">
+                                    <span class="text-[9px] font-black uppercase text-indigo-400 bg-indigo-50 px-2 py-1 rounded-lg">Mark</span>
+                                    <button onclick="event.stopPropagation(); deleteSession(<?php echo $sess['id']; ?>)"
+                                        class="text-red-400 hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100">
+                                        <i class="fa-solid fa-trash text-xs"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <?php endforeach; ?>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- RIGHT: Mark Attendance Panel + Summary -->
+                <div class="xl:col-span-2 space-y-5">
+
+                    <!-- Mark Attendance Panel -->
+                    <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                        <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+                            <div>
+                                <h3 class="font-black text-slate-800 text-sm" id="att-panel-title"><i class="fa-solid fa-user-check text-indigo-400 mr-2"></i>Select a session to mark attendance</h3>
+                                <p class="text-[10px] text-slate-400 mt-0.5" id="att-panel-sub">Click a session on the left</p>
+                            </div>
+                            <button onclick="saveAttendance()"
+                                id="att-save-btn"
+                                class="hidden px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase rounded-xl tracking-widest transition-all active:scale-95 shadow-lg shadow-emerald-200">
+                                <i class="fa-solid fa-floppy-disk mr-2"></i>Save
+                            </button>
+                        </div>
+                        <div id="att-student-list" class="px-6 py-6">
+                            <div class="text-center py-8 text-slate-300">
+                                <i class="fa-solid fa-calendar-xmark text-4xl mb-3 block"></i>
+                                <p class="text-sm">No session selected</p>
+                            </div>
+                        </div>
+                        <div id="att-save-msg" class="hidden px-6 pb-4 text-xs text-center"></div>
+                    </div>
+
+                    <!-- Student Absence Summary -->
+                    <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                        <div class="px-6 py-4 border-b border-slate-100 bg-slate-50">
+                            <h3 class="font-black text-slate-800 text-sm"><i class="fa-solid fa-chart-pie text-indigo-400 mr-2"></i>Absence Summary — <?php echo htmlspecialchars($att_sel_unit['title']); ?></h3>
+                            <p class="text-[10px] text-slate-400 mt-0.5">Students above 33.33% absence are barred from the exam.</p>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <?php if (empty($att_summary)): ?>
+                            <p class="text-slate-400 text-xs text-center py-8 italic">No students registered for this unit.</p>
+                            <?php else: ?>
+                            <table class="w-full text-left text-sm">
+                                <thead>
+                                    <tr class="bg-slate-50 text-[10px] font-black uppercase text-slate-400">
+                                        <th class="px-6 py-3">Student</th>
+                                        <th class="px-4 py-3 text-center">Sessions</th>
+                                        <th class="px-4 py-3 text-center">Attended</th>
+                                        <th class="px-4 py-3 text-center">Absent</th>
+                                        <th class="px-4 py-3 text-center">Absence %</th>
+                                        <th class="px-4 py-3 text-center">Exam Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-50">
+                                <?php foreach ($att_summary as $astu): ?>
+                                <?php $pct = floatval($astu['absence_pct'] ?? 0); ?>
+                                <tr class="hover:bg-slate-50 transition-colors <?php echo $astu['barred'] ? 'bg-red-50/50' : ''; ?>">
+                                    <td class="px-6 py-3 font-bold text-slate-800 text-sm"><?php echo htmlspecialchars($astu['full_name']); ?></td>
+                                    <td class="px-4 py-3 text-center text-slate-600 text-xs"><?php echo intval($astu['total_sessions']); ?></td>
+                                    <td class="px-4 py-3 text-center text-emerald-600 font-bold text-xs"><?php echo intval($astu['attended']); ?></td>
+                                    <td class="px-4 py-3 text-center text-red-500 font-bold text-xs"><?php echo intval($astu['absences']); ?></td>
+                                    <td class="px-4 py-3 text-center">
+                                        <?php if ($astu['total_sessions'] > 0): ?>
+                                        <div class="flex items-center justify-center space-x-2">
+                                            <div class="w-16 bg-slate-100 rounded-full h-1.5">
+                                                <div class="h-1.5 rounded-full <?php echo $astu['barred'] ? 'bg-red-500' : ($pct > 20 ? 'bg-amber-400' : 'bg-emerald-400'); ?>"
+                                                     style="width:<?php echo min(100,$pct); ?>%"></div>
+                                            </div>
+                                            <span class="text-xs font-black <?php echo $astu['barred'] ? 'text-red-600' : ($pct > 20 ? 'text-amber-600' : 'text-slate-600'); ?>"><?php echo $pct; ?>%</span>
+                                        </div>
+                                        <?php else: ?>
+                                        <span class="text-slate-300 text-xs">—</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td class="px-4 py-3 text-center">
+                                        <?php if ($astu['total_sessions'] == 0): ?>
+                                        <span class="text-[10px] font-black text-slate-300 border border-slate-200 px-2.5 py-1 rounded-xl">No Data</span>
+                                        <?php elseif ($astu['barred']): ?>
+                                        <span class="text-[10px] font-black text-red-600 bg-red-50 border border-red-200 px-2.5 py-1 rounded-xl"><i class="fa-solid fa-ban mr-1"></i>BARRED</span>
+                                        <?php else: ?>
+                                        <span class="text-[10px] font-black text-emerald-600 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-xl"><i class="fa-solid fa-circle-check mr-1"></i>Eligible</span>
+                                        <?php endif; ?>
+                                    </td>
+                                </tr>
+                                <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+            <?php endif; /* att_sel_unit */ ?>
+            <?php endif; /* att_units */ ?>
+        </div>
+
+        <!-- Attendance JS -->
+        <script>
+        let currentSessionId = null;
+
+        function createSession(unitId) {
+            const title = document.getElementById('sess-title').value.trim();
+            const date  = document.getElementById('sess-date').value;
+            const msg   = document.getElementById('sess-msg');
+            if (!title || !date) { showMsg(msg, 'Please fill in all fields.', false); return; }
+            fetch('attendance_actions.php', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: `action=create_session&unit_id=${unitId}&title=${encodeURIComponent(title)}&session_date=${date}`
+            })
+            .then(r => r.json())
+            .then(d => {
+                if (d.success) {
+                    showMsg(msg, 'Session created!', true);
+                    setTimeout(() => location.reload(), 800);
+                } else {
+                    showMsg(msg, d.error || 'Error creating session.', false);
+                }
+            });
+        }
+
+        function loadSession(sessionId, title, date) {
+            currentSessionId = sessionId;
+            document.getElementById('att-panel-title').innerHTML = `<i class="fa-solid fa-user-check text-indigo-400 mr-2"></i>${title}`;
+            document.getElementById('att-panel-sub').textContent = new Date(date + 'T00:00:00').toDateString();
+            document.getElementById('att-save-btn').classList.remove('hidden');
+            document.getElementById('att-student-list').innerHTML = '<div class="text-center py-6 text-slate-400 text-sm"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Loading students...</div>';
+            document.getElementById('att-save-msg').classList.add('hidden');
+
+            fetch(`attendance_actions.php?action=get_session_students&session_id=${sessionId}`)
+            .then(r => r.json())
+            .then(students => {
+                if (!students.length) {
+                    document.getElementById('att-student-list').innerHTML = '<p class="text-slate-400 text-xs text-center py-8 italic">No students registered for this unit.</p>';
+                    return;
+                }
+                let html = '<div class="space-y-2">';
+                students.forEach(s => {
+                    const checked = s.status === 'present';
+                    html += `
+                    <div class="flex items-center justify-between p-3 rounded-xl border transition-all ${checked ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-100'}" id="row-${s.student_id}">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-black text-xs">
+                                ${s.full_name.charAt(0).toUpperCase()}
+                            </div>
+                            <span class="font-bold text-slate-800 text-sm">${s.full_name}</span>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <button onclick="toggleAttendance(${s.student_id}, 'absent')"
+                                id="btn-absent-${s.student_id}"
+                                class="px-3 py-1.5 text-[10px] font-black uppercase rounded-xl border transition-all ${!checked ? 'bg-red-500 text-white border-red-500' : 'bg-white text-slate-400 border-slate-200 hover:border-red-300'}">
+                                <i class="fa-solid fa-xmark mr-1"></i>Absent
+                            </button>
+                            <button onclick="toggleAttendance(${s.student_id}, 'present')"
+                                id="btn-present-${s.student_id}"
+                                class="px-3 py-1.5 text-[10px] font-black uppercase rounded-xl border transition-all ${checked ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-white text-slate-400 border-slate-200 hover:border-emerald-300'}">
+                                <i class="fa-solid fa-check mr-1"></i>Present
+                            </button>
+                        </div>
+                    </div>`;
+                });
+                html += '</div>';
+                document.getElementById('att-student-list').innerHTML = html;
+                window._attData = {};
+                students.forEach(s => { window._attData[s.student_id] = s.status; });
+            });
+        }
+
+        function toggleAttendance(studentId, status) {
+            window._attData = window._attData || {};
+            window._attData[studentId] = status;
+            const row = document.getElementById('row-' + studentId);
+            const btnP = document.getElementById('btn-present-' + studentId);
+            const btnA = document.getElementById('btn-absent-' + studentId);
+            if (status === 'present') {
+                row.className = row.className.replace('bg-slate-50 border-slate-100','bg-emerald-50 border-emerald-200');
+                btnP.className = btnP.className.replace(/bg-white text-slate-400 border-slate-200 hover:border-emerald-300/,'bg-emerald-500 text-white border-emerald-500');
+                btnA.className = btnA.className.replace(/bg-red-500 text-white border-red-500/,'bg-white text-slate-400 border-slate-200 hover:border-red-300');
+                btnP.className = 'px-3 py-1.5 text-[10px] font-black uppercase rounded-xl border transition-all bg-emerald-500 text-white border-emerald-500';
+                btnA.className = 'px-3 py-1.5 text-[10px] font-black uppercase rounded-xl border transition-all bg-white text-slate-400 border-slate-200 hover:border-red-300';
+                row.className  = 'flex items-center justify-between p-3 rounded-xl border transition-all bg-emerald-50 border-emerald-200';
+            } else {
+                btnA.className = 'px-3 py-1.5 text-[10px] font-black uppercase rounded-xl border transition-all bg-red-500 text-white border-red-500';
+                btnP.className = 'px-3 py-1.5 text-[10px] font-black uppercase rounded-xl border transition-all bg-white text-slate-400 border-slate-200 hover:border-emerald-300';
+                row.className  = 'flex items-center justify-between p-3 rounded-xl border transition-all bg-slate-50 border-slate-100';
+            }
+        }
+
+        function saveAttendance() {
+            if (!currentSessionId || !window._attData) return;
+            const records = Object.entries(window._attData).map(([sid, status]) => ({student_id: parseInt(sid), status}));
+            const body = `action=mark_attendance&session_id=${currentSessionId}&` +
+                records.map((r,i) => `records[${i}][student_id]=${r.student_id}&records[${i}][status]=${r.status}`).join('&');
+            fetch('attendance_actions.php', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body
+            })
+            .then(r => r.json())
+            .then(d => {
+                const msg = document.getElementById('att-save-msg');
+                showMsg(msg, d.success ? '✓ Attendance saved successfully!' : 'Error saving.', d.success);
+                if (d.success) setTimeout(() => location.reload(), 900);
+            });
+        }
+
+        function deleteSession(sessionId) {
+            if (!confirm('Delete this session and all its attendance records?')) return;
+            fetch('attendance_actions.php', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: `action=delete_session&session_id=${sessionId}`
+            })
+            .then(r => r.json())
+            .then(d => { if (d.success) location.reload(); });
+        }
+
+        function showMsg(el, text, success) {
+            el.textContent = text;
+            el.className = `text-xs text-center rounded-xl px-3 py-2 ${success ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'}`;
+            el.classList.remove('hidden');
+            setTimeout(() => el.classList.add('hidden'), 4000);
         }
         </script>
 

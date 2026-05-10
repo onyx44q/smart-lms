@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: May 01, 2026 at 06:50 AM
+-- Generation Time: May 09, 2026 at 10:54 PM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -71,6 +71,49 @@ INSERT INTO `assignment_submissions` (`id`, `assignment_id`, `student_id`, `subm
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `attendance_records`
+--
+
+CREATE TABLE `attendance_records` (
+  `id` int(11) NOT NULL,
+  `session_id` int(11) NOT NULL COMMENT 'FK: attendance_sessions.id',
+  `student_id` int(11) NOT NULL COMMENT 'FK: users.id (role=student)',
+  `status` enum('present','absent') NOT NULL DEFAULT 'absent',
+  `marked_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='Present/absent record for each student per session.';
+
+--
+-- Dumping data for table `attendance_records`
+--
+
+INSERT INTO `attendance_records` (`id`, `session_id`, `student_id`, `status`, `marked_at`) VALUES
+(1, 1, 1, 'present', '2026-05-09 20:46:04');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `attendance_sessions`
+--
+
+CREATE TABLE `attendance_sessions` (
+  `id` int(11) NOT NULL,
+  `unit_id` int(11) NOT NULL COMMENT 'FK: course_units.id',
+  `lecturer_id` int(11) NOT NULL COMMENT 'FK: users.id (role=lecturer)',
+  `session_date` date NOT NULL,
+  `title` varchar(255) NOT NULL DEFAULT 'Lecture',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci COMMENT='Each row is one lecture/session slot per unit per date.';
+
+--
+-- Dumping data for table `attendance_sessions`
+--
+
+INSERT INTO `attendance_sessions` (`id`, `unit_id`, `lecturer_id`, `session_date`, `title`, `created_at`) VALUES
+(1, 1, 5, '2026-05-09', 'Lecture', '2026-05-09 20:45:18');
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `courses`
 --
 
@@ -88,7 +131,8 @@ CREATE TABLE `courses` (
 
 INSERT INTO `courses` (`id`, `title`, `description`, `lecturer_id`, `skill_category`) VALUES
 (1, 'Data Science', NULL, 5, NULL),
-(3, 'Software Engineering', NULL, 9, NULL);
+(3, 'Software Engineering', NULL, 9, NULL),
+(4, 'Computer science', NULL, NULL, NULL);
 
 -- --------------------------------------------------------
 
@@ -132,7 +176,8 @@ CREATE TABLE `enrollments` (
 --
 
 INSERT INTO `enrollments` (`id`, `student_id`, `course_id`, `enroll_date`) VALUES
-(3, 1, 1, '2026-04-12 13:20:43');
+(3, 1, 1, '2026-04-12 13:20:43'),
+(8, 1, 3, '2026-05-01 13:58:05');
 
 -- --------------------------------------------------------
 
@@ -158,7 +203,8 @@ CREATE TABLE `materials` (
 INSERT INTO `materials` (`id`, `course_id`, `unit_id`, `lecturer_id`, `title`, `type`, `file_path`, `upload_date`) VALUES
 (1, 1, 1, 5, 'Week1', 'pdf', 'uploads/notes/1775987401_Sustainable_AI.pdf', '2026-04-12 09:50:01'),
 (2, 1, 1, 5, 'week2', 'video', 'uploads/videos/1775990414_Presentations_mad_2025_11_16_022055.mp4', '2026-04-12 10:40:14'),
-(3, 1, 1, 5, 'Week 3 Intelligence Agents', 'pdf', 'uploads/notes/1776178025_Intelligent_Agents.pdf', '2026-04-14 14:47:05');
+(3, 1, 1, 5, 'Week 3 Intelligence Agents', 'pdf', 'uploads/notes/1776178025_Intelligent_Agents.pdf', '2026-04-14 14:47:05'),
+(6, 3, 2, 9, 'Requirements engineering', 'pdf', 'uploads/notes/1777612537_Lecture_3-_Requirements_Engineering.pdf', '2026-05-01 05:15:37');
 
 -- --------------------------------------------------------
 
@@ -207,7 +253,17 @@ INSERT INTO `notifications` (`id`, `user_id`, `message`, `is_read`, `created_at`
 (26, 1, 'A new quiz \"Artificial intelligence - Intelligence Agents (Practical Application)\" has been published. Log in to take it now.', 0, '2026-04-23 17:31:27'),
 (27, 1, 'Foundational gaps detected. You have been directed to revision materials to strengthen core concepts. Priority gap detected: Practical Application is 80 points below your career target. Predicted grade: F.', 0, '2026-04-23 17:36:06'),
 (28, 1, 'A new quiz \"Artificial intelligence - sustainable ai (Core Theory)\" has been published. Log in to take it now.', 0, '2026-04-23 17:41:34'),
-(29, 1, 'Excellent performance on this assessment. You have unlocked the next level of content. Priority gap detected: Practical Application is 80 points below your career target. Predicted grade: D.', 0, '2026-04-23 17:43:14');
+(29, 1, 'Excellent performance on this assessment. You have unlocked the next level of content. Priority gap detected: Practical Application is 80 points below your career target. Predicted grade: D.', 0, '2026-04-23 17:43:14'),
+(30, 1, 'A new quiz \"Introduction — Requirements engineering (Practical Application)\" has been published. Log in to take it now.', 0, '2026-05-01 10:32:48'),
+(31, 1, 'A new quiz \"Introduction — Requirements engineering (Practical Application)\" has been published. Log in to take it now.', 0, '2026-05-01 10:32:50'),
+(32, 1, 'A new quiz \"Introduction — Requirements engineering (Practical Application)\" has been published. Log in to take it now.', 0, '2026-05-01 10:33:01'),
+(33, 1, 'A new quiz \"Introduction — Requirements engineering (Practical Application)\" has been published. Log in to take it now.', 0, '2026-05-01 10:33:03'),
+(34, 1, 'A new quiz \"Introduction — Requirements engineering (General Aptitude)\" has been published. Log in to take it now.', 0, '2026-05-01 10:33:06'),
+(35, 1, 'A new quiz \"Introduction — Requirements engineering (General Aptitude)\" has been published. Log in to take it now.', 0, '2026-05-01 10:33:09'),
+(36, 1, 'Excellent performance on this assessment. You have unlocked the next level of content. Priority gap detected: Practical Application is 80 points below your career target. Predicted grade: D.', 0, '2026-05-01 11:00:25'),
+(37, 1, 'Good effort. Reinforce your understanding before moving forward. Attempt 1 of 3. Priority gap detected: Practical Application is 80 points below your career target. Predicted grade: F.', 0, '2026-05-01 11:04:32'),
+(38, 1, 'A new quiz \"Introduction — Requirements engineering (Core Theory)\" has been published. Log in to take it now.', 0, '2026-05-01 11:06:25'),
+(39, 1, 'Excellent performance on this assessment. You have unlocked the next level of content. Priority gap detected: Practical Application is 76.8 points below your career target. Predicted grade: F.', 0, '2026-05-01 11:08:42');
 
 -- --------------------------------------------------------
 
@@ -269,7 +325,22 @@ INSERT INTO `questions` (`id`, `quiz_id`, `question_text`, `option_a`, `option_b
 (93, 29, 'What is the term for the process of designing AI systems that are environmentally friendly and sustainable?', 'Sustainable AI design', 'Green AI development', 'Environmental AI engineering', 'AI sustainability engineering', 'D', 'AI sustainability engineering refers to the process of designing AI systems that are environmentally friendly and sustainable.'),
 (264, 61, 'What is the primary goal of Sustainable AI?', 'To increase computational power and reduce energy consumption', 'To minimize the environmental impact of AI systems', 'To improve AI model accuracy without considering energy efficiency', 'To reduce the cost of AI development', 'B', 'Sustainable AI aims to minimize the environmental impact of AI systems, including energy consumption and e-waste generation.'),
 (265, 61, 'Which of the following is an example of Sustainable AI?', 'Training a large language model on a single GPU', 'Using a cloud-based AI platform with minimal energy efficiency', 'Implementing a federated learning approach to reduce data transfer', 'Deploying a deep learning model on a single server', 'C', 'Federated learning reduces the need for data transfer, thereby minimizing energy consumption and carbon footprint.'),
-(266, 61, 'What is the term for the environmental impact of AI systems?', 'Carbon footprint', 'Digital pollution', 'E-waste generation', 'All of the above', 'D', 'The environmental impact of AI systems includes carbon footprint, digital pollution, and e-waste generation.');
+(266, 61, 'What is the term for the environmental impact of AI systems?', 'Carbon footprint', 'Digital pollution', 'E-waste generation', 'All of the above', 'D', 'The environmental impact of AI systems includes carbon footprint, digital pollution, and e-waste generation.'),
+(300, 67, 'A software development company is building an e-commerce platform for a client. During a meeting with the client, the requirements engineer extracts the following non-functional requirement: \'The system should be able to handle at least 100 concurrent user sessions without a significant decrease in performance.\' Which of the following activities should the requirements engineer perform next?', 'Create a detailed design for the system architecture', 'Negotiate with the client to identify the possible risks and trade-offs associated with this requirement', 'Assume the requirement is feasible and move on to the next one', 'Assign a priority to this requirement without considering its feasibility', 'B', 'The requirements engineer should negotiate with the client to identify the possible risks and trade-offs associated with this requirement. This is because the requirement is non-functional and may have significant implications on the system design and development. The requirements engineer needs to understand the client\'s expectations and priorities to ensure that the system meets the necessary performance requirements.'),
+(301, 67, 'A requirements engineer is working on a project to develop a mobile app for a popular restaurant chain. The restaurant wants the app to have a \'favorite dishes\' feature, where users can save their favorite dishes for easy access. However, the requirements engineer notices that the restaurant\'s database does not currently store user information, including favorite dishes. What should the requirements engineer do?', 'Modify the existing database schema to accommodate user information', 'Design a new database schema to store user information, including favorite dishes', 'Ignore the favorite dishes feature and focus on other requirements', 'Ask the restaurant to provide additional information about the user information storage requirements', 'A', 'The requirements engineer should modify the existing database schema to accommodate user information, including favorite dishes. This is because the favorite dishes feature requires the storage of user information, which is already a part of the system. Modifying the existing schema is a more efficient and cost-effective solution than designing a new schema or ignoring the feature.'),
+(302, 67, 'A requirements engineer is conducting a requirements elicitation session with a group of stakeholders for a project to develop a smart home automation system. During the session, one stakeholder mentions that the system should be able to integrate with multiple smart home devices from different manufacturers. However, another stakeholder expresses concerns about the security risks associated with integrating multiple devices. What should the requirements engineer do?', 'Document the stakeholder\'s concerns and move on to the next requirement', 'Elicit more information from the stakeholders about the security risks and potential solutions', 'Assume that the system will be able to integrate with multiple devices without any security risks', 'Provide a solution to the security risks without further discussion with the stakeholders', 'B', 'The requirements engineer should elicit more information from the stakeholders about the security risks and potential solutions. This is because the requirements engineer needs to understand the stakeholders\' concerns and priorities to ensure that the system meets the necessary security requirements. Providing a solution without further discussion may not address the stakeholders\' concerns and may lead to misunderstandings.'),
+(303, 67, 'A requirements engineer is working on a project to develop a project management tool for a construction company. The company wants the tool to have a feature that allows users to create and manage Gantt charts. However, the requirements engineer notices that the tool\'s current architecture is based on a relational database management system (RDBMS). What should the requirements engineer do?', 'Design a new architecture for the tool using a graph database management system', 'Modify the existing architecture to accommodate the Gantt chart feature', 'Ignore the Gantt chart feature and focus on other requirements', 'Ask the company to provide additional information about the Gantt chart feature requirements', 'B', 'The requirements engineer should modify the existing architecture to accommodate the Gantt chart feature. This is because the Gantt chart feature requires the storage and management of complex relationships between tasks, which can be efficiently handled by an RDBMS. Modifying the existing architecture is a more efficient and cost-effective solution than designing a new architecture or ignoring the feature.'),
+(304, 67, 'A requirements engineer is conducting a requirements validation session with a group of stakeholders for a project to develop a healthcare information system. During the session, one stakeholder mentions that the system should be able to track patient medication histories. However, another stakeholder expresses concerns about the system\'s ability to handle patient confidentiality and data privacy. What should the requirements engineer do?', 'Document the stakeholder\'s concerns and move on to the next requirement', 'Elicit more information from the stakeholders about patient confidentiality and data privacy requirements', 'Assume that the system will be able to handle patient confidentiality and data privacy', 'Provide a solution to patient confidentiality and data privacy without further discussion with the stakeholders', 'B', 'The requirements engineer should elicit more information from the stakeholders about patient confidentiality and data privacy requirements. This is because the requirements engineer needs to understand the stakeholders\' concerns and priorities to ensure that the system meets the necessary confidentiality and data privacy requirements. Providing a solution without further discussion may not address the stakeholders\' concerns and may lead to misunderstandings.'),
+(305, 68, 'A project team is responsible for developing a software system that requires real-time data processing. The stakeholders have agreed that the system must respond within 5 seconds to any user input. What type of requirement is this?', 'Functional requirement', 'Non-functional requirement', 'Quality attribute', 'Performance characteristic', 'B', 'This requirement is a non-functional requirement because it specifies a constraint on the system\'s performance rather than a specific function it should perform.'),
+(306, 68, 'A software system\'s requirements are gathered and documented using use cases, user stories, and business process models. Which of the following is NOT a key aspect of requirements engineering in this scenario?', 'Analyzing the requirements for inconsistencies', 'Creating a requirements management plan', 'Developing a comprehensive test plan', 'Translating the requirements into code', 'D', 'Requirements engineering involves gathering, documenting, and analyzing requirements, but not translating them directly into code. That is a task for software development.'),
+(307, 68, 'A project team is tasked with developing a software system that must meet the following non-functional requirement: \'The system must be accessible to users with visual impairments.\' What is the primary goal of this requirement?', 'To ensure the system is user-friendly', 'To improve the system\'s performance', 'To increase the system\'s security', 'To make the system accessible to users with disabilities', 'D', 'This requirement aims to make the system accessible to users with visual impairments, which is a key aspect of digital accessibility.'),
+(308, 68, 'A software system\'s requirements are subject to change due to evolving business needs. What is the best practice for managing such changes?', 'Revising the requirements document', 'Ignoring the changes and proceeding with the original plan', 'Creating a new requirements document', 'Using a change management process', 'D', 'Using a change management process helps to track and manage changes to the requirements, ensuring that the changes are properly assessed and implemented.'),
+(309, 68, 'A project team is working on a software system that must meet the following functional requirement: \'The system must allow users to create and manage their own accounts.\' What is the primary characteristic of this requirement?', 'It is a non-functional requirement', 'It is a quality attribute', 'It is a functional requirement', 'It is a performance characteristic', 'C', 'This requirement is a functional requirement because it specifies a specific function that the system must perform.'),
+(315, 70, 'What is the primary goal of requirements elicitation in the requirements engineering process?', 'To identify and document functional requirements only', 'To capture the needs and desires of stakeholders in a comprehensive and unambiguous manner', 'To prioritize and evaluate existing requirements against project constraints', 'To validate and verify requirements against existing software solutions', 'B', 'Requirements elicitation is the process of gathering and documenting stakeholder needs and desires. Its primary goal is to capture these needs in a comprehensive and unambiguous manner, ensuring that all requirements are properly understood and documented.'),
+(316, 70, 'What is the key difference between a functional requirement and a non-functional requirement?', 'Functional requirements describe what the system should do, while non-functional requirements describe how the system should behave', 'Functional requirements describe how the system should behave, while non-functional requirements describe what the system should do', 'Functional requirements are specific to user interactions, while non-functional requirements are general system characteristics', 'Functional requirements are general system characteristics, while non-functional requirements are specific to user interactions', 'A', 'Functional requirements describe what the system should do, while non-functional requirements describe how the system should behave, its performance, or other aspects not directly related to its functionality'),
+(317, 70, 'What is the purpose of a requirements baseline in the requirements engineering process?', 'To establish a reference point for future requirements changes or updates', 'To document and track changes to existing requirements', 'To prioritize and allocate requirements to project tasks', 'To validate and verify requirements against project constraints', 'A', 'A requirements baseline is a reference point for future requirements changes or updates, providing a documented history of requirements evolution and ensuring consistency across the project lifecycle'),
+(318, 70, 'Which of the following is an example of a non-functional requirement?', 'The system should display a list of available products for purchase', 'The system should respond to user input within 2 seconds', 'The system should authenticate user credentials', 'The system should provide a user manual', 'B', 'Non-functional requirements describe aspects of the system\'s behavior, such as performance, security, or usability. In this case, the system responding to user input within 2 seconds is a non-functional requirement'),
+(319, 70, 'What is the term for the process of reviewing and evaluating requirements to identify inconsistencies, ambiguities, or omissions?', 'Requirements validation', 'Requirements verification', 'Requirements validation and verification', 'Requirements review and analysis', 'D', 'Requirements review and analysis involves examining requirements to identify inconsistencies, ambiguities, or omissions, ensuring that they are complete, consistent, and unambiguous');
 
 -- --------------------------------------------------------
 
@@ -281,6 +352,7 @@ CREATE TABLE `quizzes` (
   `id` int(11) NOT NULL,
   `course_id` int(11) DEFAULT NULL,
   `unit_id` int(11) DEFAULT NULL,
+  `material_id` int(11) DEFAULT NULL,
   `title` varchar(255) NOT NULL,
   `difficulty` enum('beginner','intermediate','advanced') DEFAULT 'beginner',
   `is_active` tinyint(1) DEFAULT 0,
@@ -294,10 +366,13 @@ CREATE TABLE `quizzes` (
 -- Dumping data for table `quizzes`
 --
 
-INSERT INTO `quizzes` (`id`, `course_id`, `unit_id`, `title`, `difficulty`, `is_active`, `skill_name`, `topic`, `created_by`, `created_at`) VALUES
-(4, 1, 1, 'sustainable ai Assessment', 'beginner', 1, 'General Aptitude', NULL, 5, '2026-04-13 20:26:20'),
-(29, 1, 1, 'Artificial intelligence - sustainable ai', 'beginner', 1, 'Practical Application', 'sustainable ai', 5, '2026-04-14 14:34:31'),
-(61, 1, 1, 'Artificial intelligence - sustainable ai (Core Theory)', 'beginner', 1, 'Core Theory', 'sustainable ai', 5, '2026-04-23 17:41:25');
+INSERT INTO `quizzes` (`id`, `course_id`, `unit_id`, `material_id`, `title`, `difficulty`, `is_active`, `skill_name`, `topic`, `created_by`, `created_at`) VALUES
+(4, 1, 1, NULL, 'sustainable ai Assessment', 'beginner', 1, 'General Aptitude', NULL, 5, '2026-04-13 20:26:20'),
+(29, 1, 1, NULL, 'Artificial intelligence - sustainable ai', 'beginner', 1, 'Practical Application', 'sustainable ai', 5, '2026-04-14 14:34:31'),
+(61, 1, 1, NULL, 'Artificial intelligence - sustainable ai (Core Theory)', 'beginner', 1, 'Core Theory', 'sustainable ai', 5, '2026-04-23 17:41:25'),
+(67, 3, 2, 6, 'Introduction — Requirements engineering (Practical Application)', 'intermediate', 1, 'Practical Application', 'Requirements engineering', 9, '2026-05-01 05:16:57'),
+(68, 3, 2, 6, 'Introduction — Requirements engineering (General Aptitude)', 'intermediate', 1, 'General Aptitude', 'Requirements engineering', 9, '2026-05-01 05:18:00'),
+(70, 3, 2, 6, 'Introduction — Requirements engineering (Core Theory)', 'advanced', 1, 'Core Theory', 'Requirements engineering', 9, '2026-05-01 11:06:09');
 
 -- --------------------------------------------------------
 
@@ -331,7 +406,10 @@ INSERT INTO `results` (`id`, `student_id`, `quiz_id`, `score`, `recommendation`,
 (5, 1, 57, 80.00, 'Excellent performance on this assessment. You have unlocked the next level of content. Priority gap detected: Practical Application is 80 points below your career target.', 'advance', 'critical', 'F', 'advanced', 2, '2026-04-21 18:48:22'),
 (6, 1, 56, 100.00, 'Excellent performance on this assessment. You have unlocked the next level of content. Priority gap detected: Practical Application is 80 points below your career target.', 'advance', 'critical', 'D', 'advanced', 1, '2026-04-21 18:50:08'),
 (7, 1, 58, 25.00, 'Foundational gaps detected. You have been directed to revision materials to strengthen core concepts. Priority gap detected: Practical Application is 80 points below your career target.', 'remedial', 'critical', 'F', 'beginner', 1, '2026-04-23 17:36:05'),
-(8, 1, 61, 100.00, 'Excellent performance on this assessment. You have unlocked the next level of content. Priority gap detected: Practical Application is 80 points below your career target.', 'advance', 'critical', 'D', 'advanced', 1, '2026-04-23 17:43:13');
+(8, 1, 61, 100.00, 'Excellent performance on this assessment. You have unlocked the next level of content. Priority gap detected: Practical Application is 80 points below your career target.', 'advance', 'critical', 'D', 'advanced', 1, '2026-04-23 17:43:13'),
+(9, 1, 68, 100.00, 'Excellent performance on this assessment. You have unlocked the next level of content. Priority gap detected: Practical Application is 80 points below your career target.', 'advance', 'critical', 'D', 'advanced', 1, '2026-05-01 11:00:25'),
+(10, 1, 67, 60.00, 'Good effort. Reinforce your understanding before moving forward. Attempt 1 of 3. Priority gap detected: Practical Application is 80 points below your career target.', 'retry', 'critical', 'F', 'intermediate', 1, '2026-05-01 11:04:31'),
+(11, 1, 70, 80.00, 'Excellent performance on this assessment. You have unlocked the next level of content. Priority gap detected: Practical Application is 76.8 points below your career target.', 'advance', 'critical', 'F', 'advanced', 1, '2026-05-01 11:08:42');
 
 -- --------------------------------------------------------
 
@@ -440,7 +518,22 @@ INSERT INTO `student_answers` (`id`, `result_id`, `student_id`, `question_id`, `
 (38, 7, 1, 253, 'A', 0, '2026-04-23 17:36:06'),
 (39, 8, 1, 264, 'B', 1, '2026-04-23 17:43:13'),
 (40, 8, 1, 265, 'C', 1, '2026-04-23 17:43:13'),
-(41, 8, 1, 266, 'D', 1, '2026-04-23 17:43:14');
+(41, 8, 1, 266, 'D', 1, '2026-04-23 17:43:14'),
+(42, 9, 1, 305, 'B', 1, '2026-05-01 11:00:25'),
+(43, 9, 1, 306, 'D', 1, '2026-05-01 11:00:25'),
+(44, 9, 1, 307, 'D', 1, '2026-05-01 11:00:25'),
+(45, 9, 1, 308, 'D', 1, '2026-05-01 11:00:25'),
+(46, 9, 1, 309, 'C', 1, '2026-05-01 11:00:25'),
+(47, 10, 1, 300, 'B', 1, '2026-05-01 11:04:32'),
+(48, 10, 1, 301, 'D', 0, '2026-05-01 11:04:32'),
+(49, 10, 1, 302, 'B', 1, '2026-05-01 11:04:32'),
+(50, 10, 1, 303, 'D', 0, '2026-05-01 11:04:32'),
+(51, 10, 1, 304, 'B', 1, '2026-05-01 11:04:32'),
+(52, 11, 1, 315, 'B', 1, '2026-05-01 11:08:42'),
+(53, 11, 1, 316, 'A', 1, '2026-05-01 11:08:42'),
+(54, 11, 1, 317, 'A', 1, '2026-05-01 11:08:42'),
+(55, 11, 1, 318, 'B', 1, '2026-05-01 11:08:42'),
+(56, 11, 1, 319, 'C', 0, '2026-05-01 11:08:42');
 
 -- --------------------------------------------------------
 
@@ -477,6 +570,7 @@ INSERT INTO `student_marks` (`id`, `student_id`, `course_id`, `lecturer_id`, `ex
 CREATE TABLE `student_mastery` (
   `id` int(11) NOT NULL,
   `student_id` int(11) DEFAULT NULL,
+  `course_id` int(11) DEFAULT NULL,
   `skill_name` varchar(100) DEFAULT NULL,
   `mastery_level` decimal(5,2) DEFAULT 0.00,
   `last_updated` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
@@ -486,247 +580,10 @@ CREATE TABLE `student_mastery` (
 -- Dumping data for table `student_mastery`
 --
 
-INSERT INTO `student_mastery` (`id`, `student_id`, `skill_name`, `mastery_level`, `last_updated`) VALUES
-(1, 1, 'General Aptitude', 17.00, '2026-04-24 08:25:13'),
-(2, 1, 'Core Theory', 46.00, '2026-04-23 17:43:13'),
-(3, 1, 'Practical Application', 0.00, '2026-04-23 17:36:05'),
-(7, 1, 'General Aptitude', 17.00, '2026-04-24 08:25:44'),
-(8, 1, 'Practical Application', 0.00, '2026-04-24 08:25:44'),
-(9, 1, 'Core Theory', 8.50, '2026-04-24 08:25:44'),
-(10, 1, 'General Aptitude', 17.00, '2026-04-24 08:25:45'),
-(11, 1, 'Practical Application', 0.00, '2026-04-24 08:25:45'),
-(12, 1, 'Core Theory', 8.50, '2026-04-24 08:25:45'),
-(13, 1, 'General Aptitude', 17.00, '2026-04-24 08:27:17'),
-(14, 1, 'Practical Application', 0.00, '2026-04-24 08:27:17'),
-(15, 1, 'Core Theory', 8.50, '2026-04-24 08:27:17'),
-(16, 1, 'General Aptitude', 17.00, '2026-04-24 08:27:18'),
-(17, 1, 'Practical Application', 0.00, '2026-04-24 08:27:18'),
-(18, 1, 'Core Theory', 8.50, '2026-04-24 08:27:18'),
-(19, 1, 'General Aptitude', 17.00, '2026-04-24 08:27:35'),
-(20, 1, 'Practical Application', 0.00, '2026-04-24 08:27:35'),
-(21, 1, 'Core Theory', 8.50, '2026-04-24 08:27:36'),
-(22, 1, 'General Aptitude', 17.00, '2026-04-24 08:29:16'),
-(23, 1, 'Practical Application', 0.00, '2026-04-24 08:29:16'),
-(24, 1, 'Core Theory', 8.50, '2026-04-24 08:29:16'),
-(25, 1, 'General Aptitude', 17.00, '2026-04-24 08:29:18'),
-(26, 1, 'Practical Application', 0.00, '2026-04-24 08:29:19'),
-(27, 1, 'Core Theory', 8.50, '2026-04-24 08:29:19'),
-(28, 1, 'General Aptitude', 17.00, '2026-04-24 08:29:25'),
-(29, 1, 'Practical Application', 0.00, '2026-04-24 08:29:25'),
-(30, 1, 'Core Theory', 8.50, '2026-04-24 08:29:25'),
-(31, 1, 'General Aptitude', 17.00, '2026-04-24 08:29:28'),
-(32, 1, 'Practical Application', 0.00, '2026-04-24 08:29:29'),
-(33, 1, 'Core Theory', 8.50, '2026-04-24 08:29:29'),
-(34, 1, 'General Aptitude', 17.00, '2026-04-24 08:29:36'),
-(35, 1, 'Practical Application', 0.00, '2026-04-24 08:29:36'),
-(36, 1, 'Core Theory', 8.50, '2026-04-24 08:29:36'),
-(37, 1, 'General Aptitude', 17.00, '2026-04-24 08:30:26'),
-(38, 1, 'Practical Application', 0.00, '2026-04-24 08:30:26'),
-(39, 1, 'Core Theory', 8.50, '2026-04-24 08:30:26'),
-(40, 1, 'General Aptitude', 17.00, '2026-04-24 08:30:29'),
-(41, 1, 'Practical Application', 0.00, '2026-04-24 08:30:29'),
-(42, 1, 'Core Theory', 8.50, '2026-04-24 08:30:29'),
-(43, 1, 'General Aptitude', 17.00, '2026-04-24 08:30:53'),
-(44, 1, 'Practical Application', 0.00, '2026-04-24 08:30:53'),
-(45, 1, 'Core Theory', 8.50, '2026-04-24 08:30:54'),
-(46, 1, 'General Aptitude', 17.00, '2026-04-24 08:30:55'),
-(47, 1, 'Practical Application', 0.00, '2026-04-24 08:30:55'),
-(48, 1, 'Core Theory', 8.50, '2026-04-24 08:30:55'),
-(49, 1, 'General Aptitude', 17.00, '2026-04-24 08:31:17'),
-(50, 1, 'Practical Application', 0.00, '2026-04-24 08:31:17'),
-(51, 1, 'Core Theory', 8.50, '2026-04-24 08:31:17'),
-(52, 1, 'General Aptitude', 17.00, '2026-04-24 08:31:18'),
-(53, 1, 'Practical Application', 0.00, '2026-04-24 08:31:18'),
-(54, 1, 'Core Theory', 8.50, '2026-04-24 08:31:18'),
-(55, 1, 'General Aptitude', 17.00, '2026-04-24 08:40:29'),
-(56, 1, 'Practical Application', 0.00, '2026-04-24 08:40:29'),
-(57, 1, 'Core Theory', 8.50, '2026-04-24 08:40:29'),
-(58, 1, 'General Aptitude', 17.00, '2026-04-24 08:40:29'),
-(59, 1, 'Practical Application', 0.00, '2026-04-24 08:40:29'),
-(60, 1, 'Core Theory', 8.50, '2026-04-24 08:40:29'),
-(61, 1, 'General Aptitude', 17.00, '2026-04-24 08:43:46'),
-(62, 1, 'Practical Application', 0.00, '2026-04-24 08:43:46'),
-(63, 1, 'Core Theory', 8.50, '2026-04-24 08:43:47'),
-(64, 1, 'General Aptitude', 17.00, '2026-04-24 08:44:20'),
-(65, 1, 'Practical Application', 0.00, '2026-04-24 08:44:20'),
-(66, 1, 'Core Theory', 8.50, '2026-04-24 08:44:20'),
-(67, 1, 'General Aptitude', 17.00, '2026-04-24 08:44:21'),
-(68, 1, 'Practical Application', 0.00, '2026-04-24 08:44:21'),
-(69, 1, 'Core Theory', 8.50, '2026-04-24 08:44:22'),
-(70, 1, 'General Aptitude', 17.00, '2026-04-27 11:01:49'),
-(71, 1, 'Practical Application', 0.00, '2026-04-27 11:01:50'),
-(72, 1, 'Core Theory', 8.50, '2026-04-27 11:01:51'),
-(73, 1, 'General Aptitude', 17.00, '2026-04-27 11:01:56'),
-(74, 1, 'Practical Application', 0.00, '2026-04-27 11:01:57'),
-(75, 1, 'Core Theory', 8.50, '2026-04-27 11:01:58'),
-(76, 1, 'General Aptitude', 17.00, '2026-04-27 11:03:03'),
-(77, 1, 'Practical Application', 0.00, '2026-04-27 11:03:04'),
-(78, 1, 'Core Theory', 8.50, '2026-04-27 11:03:04'),
-(79, 1, 'General Aptitude', 17.00, '2026-04-27 11:03:13'),
-(80, 1, 'Practical Application', 0.00, '2026-04-27 11:03:13'),
-(81, 1, 'Core Theory', 8.50, '2026-04-27 11:03:14'),
-(82, 1, 'General Aptitude', 17.00, '2026-04-27 11:03:16'),
-(83, 1, 'Practical Application', 0.00, '2026-04-27 11:03:17'),
-(84, 1, 'Core Theory', 8.50, '2026-04-27 11:03:18'),
-(85, 1, 'General Aptitude', 17.00, '2026-04-27 11:03:22'),
-(86, 1, 'Practical Application', 0.00, '2026-04-27 11:03:22'),
-(87, 1, 'Core Theory', 8.50, '2026-04-27 11:03:23'),
-(88, 1, 'General Aptitude', 17.00, '2026-04-27 11:03:40'),
-(89, 1, 'Practical Application', 0.00, '2026-04-27 11:03:40'),
-(90, 1, 'Core Theory', 8.50, '2026-04-27 11:03:40'),
-(91, 1, 'General Aptitude', 17.00, '2026-04-27 11:04:00'),
-(92, 1, 'Practical Application', 0.00, '2026-04-27 11:04:00'),
-(93, 1, 'Core Theory', 8.50, '2026-04-27 11:04:00'),
-(94, 1, 'General Aptitude', 17.00, '2026-04-27 11:06:11'),
-(95, 1, 'Practical Application', 0.00, '2026-04-27 11:06:11'),
-(96, 1, 'Core Theory', 8.50, '2026-04-27 11:06:11'),
-(97, 1, 'General Aptitude', 17.00, '2026-04-27 11:06:45'),
-(98, 1, 'Practical Application', 0.00, '2026-04-27 11:06:45'),
-(99, 1, 'Core Theory', 8.50, '2026-04-27 11:06:46'),
-(100, 1, 'General Aptitude', 17.00, '2026-04-27 11:07:21'),
-(101, 1, 'Practical Application', 0.00, '2026-04-27 11:07:21'),
-(102, 1, 'Core Theory', 8.50, '2026-04-27 11:07:21'),
-(103, 1, 'General Aptitude', 17.00, '2026-04-27 11:07:22'),
-(104, 1, 'Practical Application', 0.00, '2026-04-27 11:07:22'),
-(105, 1, 'Core Theory', 8.50, '2026-04-27 11:07:22'),
-(106, 1, 'General Aptitude', 17.00, '2026-04-27 11:11:07'),
-(107, 1, 'Practical Application', 0.00, '2026-04-27 11:11:07'),
-(108, 1, 'Core Theory', 8.50, '2026-04-27 11:11:08'),
-(109, 1, 'General Aptitude', 17.00, '2026-04-27 11:11:12'),
-(110, 1, 'Practical Application', 0.00, '2026-04-27 11:11:12'),
-(111, 1, 'Core Theory', 8.50, '2026-04-27 11:11:13'),
-(112, 1, 'General Aptitude', 17.00, '2026-04-28 14:26:58'),
-(113, 1, 'Practical Application', 0.00, '2026-04-28 14:26:59'),
-(114, 1, 'Core Theory', 8.50, '2026-04-28 14:27:01'),
-(115, 1, 'General Aptitude', 17.00, '2026-04-28 14:27:06'),
-(116, 1, 'Practical Application', 0.00, '2026-04-28 14:27:07'),
-(117, 1, 'Core Theory', 8.50, '2026-04-28 14:27:10'),
-(118, 1, 'General Aptitude', 17.00, '2026-04-28 14:27:27'),
-(119, 1, 'Practical Application', 0.00, '2026-04-28 14:27:27'),
-(120, 1, 'Core Theory', 8.50, '2026-04-28 14:27:29'),
-(121, 1, 'General Aptitude', 17.00, '2026-04-28 14:27:34'),
-(122, 1, 'Practical Application', 0.00, '2026-04-28 14:27:35'),
-(123, 1, 'Core Theory', 8.50, '2026-04-28 14:27:37'),
-(124, 1, 'General Aptitude', 17.00, '2026-04-28 14:52:30'),
-(125, 1, 'Practical Application', 0.00, '2026-04-28 14:52:31'),
-(126, 1, 'Core Theory', 8.50, '2026-04-28 14:52:33'),
-(127, 1, 'General Aptitude', 17.00, '2026-04-28 14:52:41'),
-(128, 1, 'Practical Application', 0.00, '2026-04-28 14:52:45'),
-(129, 1, 'Core Theory', 8.50, '2026-04-28 14:52:46'),
-(130, 1, 'General Aptitude', 17.00, '2026-04-28 18:44:02'),
-(131, 1, 'Practical Application', 0.00, '2026-04-28 18:44:02'),
-(132, 1, 'Core Theory', 8.50, '2026-04-28 18:44:02'),
-(133, 1, 'General Aptitude', 17.00, '2026-04-28 18:44:05'),
-(134, 1, 'Practical Application', 0.00, '2026-04-28 18:44:05'),
-(135, 1, 'Core Theory', 8.50, '2026-04-28 18:44:05'),
-(136, 1, 'General Aptitude', 17.00, '2026-04-28 18:44:50'),
-(137, 1, 'Practical Application', 0.00, '2026-04-28 18:44:50'),
-(138, 1, 'Core Theory', 8.50, '2026-04-28 18:44:50'),
-(139, 1, 'General Aptitude', 17.00, '2026-04-28 18:44:51'),
-(140, 1, 'Practical Application', 0.00, '2026-04-28 18:44:51'),
-(141, 1, 'Core Theory', 8.50, '2026-04-28 18:44:51'),
-(142, 1, 'General Aptitude', 17.00, '2026-04-28 18:46:33'),
-(143, 1, 'Practical Application', 0.00, '2026-04-28 18:46:33'),
-(144, 1, 'Core Theory', 8.50, '2026-04-28 18:46:33'),
-(145, 1, 'General Aptitude', 17.00, '2026-04-28 18:46:34'),
-(146, 1, 'Practical Application', 0.00, '2026-04-28 18:46:34'),
-(147, 1, 'Core Theory', 8.50, '2026-04-28 18:46:34'),
-(148, 1, 'General Aptitude', 17.00, '2026-04-28 18:46:48'),
-(149, 1, 'Practical Application', 0.00, '2026-04-28 18:46:48'),
-(150, 1, 'Core Theory', 8.50, '2026-04-28 18:46:48'),
-(151, 1, 'General Aptitude', 17.00, '2026-04-28 18:46:49'),
-(152, 1, 'Practical Application', 0.00, '2026-04-28 18:46:49'),
-(153, 1, 'Core Theory', 8.50, '2026-04-28 18:46:50'),
-(154, 1, 'General Aptitude', 17.00, '2026-04-28 18:47:22'),
-(155, 1, 'Practical Application', 0.00, '2026-04-28 18:47:22'),
-(156, 1, 'Core Theory', 8.50, '2026-04-28 18:47:22'),
-(157, 1, 'General Aptitude', 17.00, '2026-04-28 18:53:40'),
-(158, 1, 'Practical Application', 0.00, '2026-04-28 18:53:40'),
-(159, 1, 'Core Theory', 8.50, '2026-04-28 18:53:40'),
-(160, 1, 'General Aptitude', 17.00, '2026-04-28 18:53:46'),
-(161, 1, 'Practical Application', 0.00, '2026-04-28 18:53:46'),
-(162, 1, 'Core Theory', 8.50, '2026-04-28 18:53:46'),
-(163, 1, 'General Aptitude', 17.00, '2026-04-28 18:53:48'),
-(164, 1, 'Practical Application', 0.00, '2026-04-28 18:53:49'),
-(165, 1, 'Core Theory', 8.50, '2026-04-28 18:53:49'),
-(166, 1, 'General Aptitude', 17.00, '2026-04-28 18:53:51'),
-(167, 1, 'Practical Application', 0.00, '2026-04-28 18:53:51'),
-(168, 1, 'Core Theory', 8.50, '2026-04-28 18:53:51'),
-(169, 1, 'General Aptitude', 17.00, '2026-04-28 18:54:15'),
-(170, 1, 'Practical Application', 0.00, '2026-04-28 18:54:15'),
-(171, 1, 'Core Theory', 8.50, '2026-04-28 18:54:15'),
-(172, 1, 'General Aptitude', 17.00, '2026-04-28 18:54:23'),
-(173, 1, 'Practical Application', 0.00, '2026-04-28 18:54:23'),
-(174, 1, 'Core Theory', 8.50, '2026-04-28 18:54:24'),
-(175, 1, 'General Aptitude', 17.00, '2026-04-28 18:54:30'),
-(176, 1, 'Practical Application', 0.00, '2026-04-28 18:54:30'),
-(177, 1, 'Core Theory', 8.50, '2026-04-28 18:54:30'),
-(178, 1, 'General Aptitude', 17.00, '2026-04-28 18:54:32'),
-(179, 1, 'Practical Application', 0.00, '2026-04-28 18:54:33'),
-(180, 1, 'Core Theory', 8.50, '2026-04-28 18:54:33'),
-(181, 1, 'General Aptitude', 17.00, '2026-04-28 18:55:41'),
-(182, 1, 'Practical Application', 0.00, '2026-04-28 18:55:42'),
-(183, 1, 'Core Theory', 8.50, '2026-04-28 18:55:42'),
-(184, 1, 'General Aptitude', 17.00, '2026-04-28 18:55:45'),
-(185, 1, 'Practical Application', 0.00, '2026-04-28 18:55:45'),
-(186, 1, 'Core Theory', 8.50, '2026-04-28 18:55:45'),
-(187, 1, 'General Aptitude', 17.00, '2026-04-28 18:55:49'),
-(188, 1, 'Practical Application', 0.00, '2026-04-28 18:55:49'),
-(189, 1, 'Core Theory', 8.50, '2026-04-28 18:55:49'),
-(190, 1, 'General Aptitude', 17.00, '2026-04-28 18:56:11'),
-(191, 1, 'Practical Application', 0.00, '2026-04-28 18:56:11'),
-(192, 1, 'Core Theory', 8.50, '2026-04-28 18:56:12'),
-(193, 1, 'General Aptitude', 17.00, '2026-04-28 18:56:15'),
-(194, 1, 'Practical Application', 0.00, '2026-04-28 18:56:15'),
-(195, 1, 'Core Theory', 8.50, '2026-04-28 18:56:15'),
-(196, 1, 'General Aptitude', 17.00, '2026-04-28 18:56:36'),
-(197, 1, 'Practical Application', 0.00, '2026-04-28 18:56:36'),
-(198, 1, 'Core Theory', 8.50, '2026-04-28 18:56:36'),
-(199, 1, 'General Aptitude', 17.00, '2026-04-28 18:56:38'),
-(200, 1, 'Practical Application', 0.00, '2026-04-28 18:56:39'),
-(201, 1, 'Core Theory', 8.50, '2026-04-28 18:56:39'),
-(202, 1, 'General Aptitude', 17.00, '2026-04-28 18:57:00'),
-(203, 1, 'Practical Application', 0.00, '2026-04-28 18:57:00'),
-(204, 1, 'Core Theory', 8.50, '2026-04-28 18:57:00'),
-(205, 1, 'General Aptitude', 17.00, '2026-04-28 18:57:03'),
-(206, 1, 'Practical Application', 0.00, '2026-04-28 18:57:03'),
-(207, 1, 'Core Theory', 8.50, '2026-04-28 18:57:03'),
-(208, 1, 'General Aptitude', 17.00, '2026-04-28 18:57:21'),
-(209, 1, 'Practical Application', 0.00, '2026-04-28 18:57:21'),
-(210, 1, 'Core Theory', 8.50, '2026-04-28 18:57:22'),
-(211, 1, 'General Aptitude', 17.00, '2026-04-28 18:57:26'),
-(212, 1, 'Practical Application', 0.00, '2026-04-28 18:57:26'),
-(213, 1, 'Core Theory', 8.50, '2026-04-28 18:57:27'),
-(214, 1, 'General Aptitude', 17.00, '2026-04-28 18:57:51'),
-(215, 1, 'Practical Application', 0.00, '2026-04-28 18:57:51'),
-(216, 1, 'Core Theory', 8.50, '2026-04-28 18:57:51'),
-(217, 1, 'General Aptitude', 17.00, '2026-04-28 18:57:55'),
-(218, 1, 'Practical Application', 0.00, '2026-04-28 18:57:56'),
-(219, 1, 'Core Theory', 8.50, '2026-04-28 18:57:56'),
-(220, 1, 'General Aptitude', 17.00, '2026-04-28 18:59:20'),
-(221, 1, 'Practical Application', 0.00, '2026-04-28 18:59:21'),
-(222, 1, 'Core Theory', 8.50, '2026-04-28 18:59:21'),
-(223, 1, 'General Aptitude', 17.00, '2026-04-28 18:59:21'),
-(224, 1, 'Practical Application', 0.00, '2026-04-28 18:59:22'),
-(225, 1, 'Core Theory', 8.50, '2026-04-28 18:59:22'),
-(226, 1, 'General Aptitude', 17.00, '2026-04-29 06:45:12'),
-(227, 1, 'Practical Application', 0.00, '2026-04-29 06:45:13'),
-(228, 1, 'Core Theory', 8.50, '2026-04-29 06:45:14'),
-(229, 1, 'General Aptitude', 17.00, '2026-04-29 06:45:15'),
-(230, 1, 'Practical Application', 0.00, '2026-04-29 06:45:17'),
-(231, 1, 'Core Theory', 8.50, '2026-04-29 06:45:17'),
-(232, 1, 'General Aptitude', 17.00, '2026-04-29 06:45:37'),
-(233, 1, 'Practical Application', 0.00, '2026-04-29 06:45:38'),
-(234, 1, 'Core Theory', 8.50, '2026-04-29 06:45:38'),
-(235, 1, 'General Aptitude', 17.00, '2026-04-29 06:47:11'),
-(236, 1, 'Practical Application', 0.00, '2026-04-29 06:47:11'),
-(237, 1, 'Core Theory', 8.50, '2026-04-29 06:47:11'),
-(238, 1, 'General Aptitude', 17.00, '2026-04-30 17:55:40'),
-(239, 1, 'Practical Application', 0.00, '2026-04-30 17:55:40'),
-(240, 1, 'Core Theory', 8.50, '2026-04-30 17:55:40'),
-(241, 1, 'General Aptitude', 17.00, '2026-04-30 17:55:42'),
-(242, 1, 'Practical Application', 0.00, '2026-04-30 17:55:42'),
-(243, 1, 'Core Theory', 8.50, '2026-04-30 17:55:42');
+INSERT INTO `student_mastery` (`id`, `student_id`, `course_id`, `skill_name`, `mastery_level`, `last_updated`) VALUES
+(385, 1, NULL, 'General Aptitude', 25.50, '2026-05-09 20:51:42'),
+(386, 1, NULL, 'Practical Application', 3.20, '2026-05-09 20:51:42'),
+(387, 1, NULL, 'Core Theory', 17.00, '2026-05-09 20:51:42');
 
 -- --------------------------------------------------------
 
@@ -767,7 +624,11 @@ CREATE TABLE `unit_assessments` (
 INSERT INTO `unit_assessments` (`id`, `unit_id`, `name`, `type`, `max_mark`, `sort_order`, `created_by`, `created_at`) VALUES
 (1, 1, 'cat 1', 'coursework', 30.00, 1, 5, '2026-04-28 18:54:14'),
 (3, 1, 'coursework', 'coursework', 30.00, 2, 5, '2026-04-28 18:56:35'),
-(4, 1, 'final', 'exam', 60.00, 3, 5, '2026-04-28 18:56:59');
+(4, 1, 'final', 'exam', 60.00, 3, 5, '2026-04-28 18:56:59'),
+(5, 2, 'cat 1', 'coursework', 30.00, 1, 9, '2026-05-01 11:49:12'),
+(6, 2, 'cat 2', 'coursework', 30.00, 2, 9, '2026-05-01 11:49:27'),
+(7, 2, 'assignment', 'coursework', 20.00, 3, 9, '2026-05-01 11:49:46'),
+(8, 2, 'final', 'coursework', 59.50, 4, 9, '2026-05-01 11:50:08');
 
 -- --------------------------------------------------------
 
@@ -791,7 +652,11 @@ CREATE TABLE `unit_marks` (
 INSERT INTO `unit_marks` (`id`, `assessment_id`, `student_id`, `mark`, `remarks`, `updated_at`) VALUES
 (1, 1, 1, 28.00, NULL, '2026-04-28 18:57:19'),
 (2, 3, 1, 30.00, NULL, '2026-04-28 18:57:20'),
-(3, 4, 1, 50.00, NULL, '2026-04-28 18:57:21');
+(3, 4, 1, 50.00, NULL, '2026-04-28 18:57:21'),
+(4, 5, 1, 27.50, 'Excellent', '2026-05-02 15:37:33'),
+(5, 6, 1, 28.50, 'Excellent', '2026-05-02 15:37:33'),
+(6, 7, 1, 19.50, 'Excellent', '2026-05-02 15:37:34'),
+(7, 8, 1, 56.50, 'Excellent', '2026-05-02 15:37:34');
 
 -- --------------------------------------------------------
 
@@ -811,7 +676,8 @@ CREATE TABLE `unit_registrations` (
 --
 
 INSERT INTO `unit_registrations` (`id`, `student_id`, `unit_id`, `registered_at`) VALUES
-(1, 1, 1, '2026-04-28 18:44:49');
+(1, 1, 1, '2026-04-28 18:44:49'),
+(4, 1, 2, '2026-05-01 10:58:05');
 
 -- --------------------------------------------------------
 
@@ -840,6 +706,35 @@ INSERT INTO `users` (`id`, `full_name`, `email`, `password`, `role`, `course_id`
 (5, 'Dr.smith', 'smith@gmail.com', '$2y$10$fZ1f6rlrYqK2LDDUM5DQxe2NWJbSRqjcVMchKntrQKTDgrf8Dk5hO', 'lecturer', 1, 'General Software Engineering', '2026-04-11 22:17:33'),
 (9, 'Lenny', 'lenny@gmail.com', '$2y$10$zISpLktT6AecVDh54Ugvqer4pvCa6fzYAEJchUoAtFfY9KrnKPsWa', 'lecturer', 3, 'General Software Engineering', '2026-04-30 18:02:11');
 
+-- --------------------------------------------------------
+
+--
+-- Stand-in structure for view `v_student_attendance`
+-- (See below for the actual view)
+--
+CREATE TABLE `v_student_attendance` (
+`student_id` int(11)
+,`full_name` varchar(100)
+,`unit_id` int(11)
+,`unit_title` varchar(255)
+,`unit_code` varchar(50)
+,`course_title` varchar(255)
+,`total_sessions` bigint(21)
+,`attended` decimal(22,0)
+,`absences` decimal(22,0)
+,`absence_pct` decimal(27,1)
+,`exam_status` varchar(8)
+);
+
+-- --------------------------------------------------------
+
+--
+-- Structure for view `v_student_attendance`
+--
+DROP TABLE IF EXISTS `v_student_attendance`;
+
+CREATE ALGORITHM=UNDEFINED DEFINER=`root`@`localhost` SQL SECURITY DEFINER VIEW `v_student_attendance`  AS SELECT `ur`.`student_id` AS `student_id`, `u`.`full_name` AS `full_name`, `cu`.`id` AS `unit_id`, `cu`.`title` AS `unit_title`, `cu`.`unit_code` AS `unit_code`, `c`.`title` AS `course_title`, count(distinct `ats`.`id`) AS `total_sessions`, sum(case when `ar`.`status` = 'present' then 1 else 0 end) AS `attended`, sum(case when `ar`.`status` = 'absent' then 1 else 0 end) AS `absences`, round(sum(case when `ar`.`status` = 'absent' then 1 else 0 end) / nullif(count(distinct `ats`.`id`),0) * 100,1) AS `absence_pct`, CASE WHEN round(sum(case when `ar`.`status` = 'absent' then 1 else 0 end) / nullif(count(distinct `ats`.`id`),0) * 100,1) > 33.33 THEN 'BARRED' ELSE 'ELIGIBLE' END AS `exam_status` FROM (((((`unit_registrations` `ur` join `users` `u` on(`u`.`id` = `ur`.`student_id`)) join `course_units` `cu` on(`cu`.`id` = `ur`.`unit_id`)) join `courses` `c` on(`c`.`id` = `cu`.`course_id`)) left join `attendance_sessions` `ats` on(`ats`.`unit_id` = `cu`.`id`)) left join `attendance_records` `ar` on(`ar`.`session_id` = `ats`.`id` and `ar`.`student_id` = `ur`.`student_id`)) GROUP BY `ur`.`student_id`, `u`.`full_name`, `cu`.`id`, `cu`.`title`, `cu`.`unit_code`, `c`.`title` ;
+
 --
 -- Indexes for dumped tables
 --
@@ -859,6 +754,24 @@ ALTER TABLE `assignment_submissions`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `unique_submission` (`assignment_id`,`student_id`),
   ADD KEY `idx_student` (`student_id`);
+
+--
+-- Indexes for table `attendance_records`
+--
+ALTER TABLE `attendance_records`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uq_session_student` (`session_id`,`student_id`),
+  ADD KEY `idx_student` (`student_id`),
+  ADD KEY `idx_session` (`session_id`);
+
+--
+-- Indexes for table `attendance_sessions`
+--
+ALTER TABLE `attendance_sessions`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uq_unit_date` (`unit_id`,`session_date`),
+  ADD KEY `idx_unit` (`unit_id`),
+  ADD KEY `idx_lecturer` (`lecturer_id`);
 
 --
 -- Indexes for table `courses`
@@ -965,7 +878,9 @@ ALTER TABLE `student_marks`
 --
 ALTER TABLE `student_mastery`
   ADD PRIMARY KEY (`id`),
-  ADD KEY `student_id` (`student_id`);
+  ADD UNIQUE KEY `unique_student_course_skill` (`student_id`,`course_id`,`skill_name`),
+  ADD UNIQUE KEY `uniq_student_skill` (`student_id`,`skill_name`),
+  ADD KEY `idx_course` (`course_id`);
 
 --
 -- Indexes for table `student_performance_logs`
@@ -1021,10 +936,22 @@ ALTER TABLE `assignment_submissions`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
 
 --
+-- AUTO_INCREMENT for table `attendance_records`
+--
+ALTER TABLE `attendance_records`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+
+--
+-- AUTO_INCREMENT for table `attendance_sessions`
+--
+ALTER TABLE `attendance_sessions`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+
+--
 -- AUTO_INCREMENT for table `courses`
 --
 ALTER TABLE `courses`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
 
 --
 -- AUTO_INCREMENT for table `course_units`
@@ -1036,19 +963,19 @@ ALTER TABLE `course_units`
 -- AUTO_INCREMENT for table `enrollments`
 --
 ALTER TABLE `enrollments`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
 
 --
 -- AUTO_INCREMENT for table `materials`
 --
 ALTER TABLE `materials`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
 
 --
 -- AUTO_INCREMENT for table `notifications`
 --
 ALTER TABLE `notifications`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=30;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=40;
 
 --
 -- AUTO_INCREMENT for table `plagiarism_reports`
@@ -1060,19 +987,19 @@ ALTER TABLE `plagiarism_reports`
 -- AUTO_INCREMENT for table `questions`
 --
 ALTER TABLE `questions`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=267;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=320;
 
 --
 -- AUTO_INCREMENT for table `quizzes`
 --
 ALTER TABLE `quizzes`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=62;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=71;
 
 --
 -- AUTO_INCREMENT for table `results`
 --
 ALTER TABLE `results`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=12;
 
 --
 -- AUTO_INCREMENT for table `schedules`
@@ -1090,7 +1017,7 @@ ALTER TABLE `skills`
 -- AUTO_INCREMENT for table `student_answers`
 --
 ALTER TABLE `student_answers`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=42;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=57;
 
 --
 -- AUTO_INCREMENT for table `student_marks`
@@ -1102,7 +1029,7 @@ ALTER TABLE `student_marks`
 -- AUTO_INCREMENT for table `student_mastery`
 --
 ALTER TABLE `student_mastery`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=244;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=526;
 
 --
 -- AUTO_INCREMENT for table `student_performance_logs`
@@ -1114,25 +1041,25 @@ ALTER TABLE `student_performance_logs`
 -- AUTO_INCREMENT for table `unit_assessments`
 --
 ALTER TABLE `unit_assessments`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
 
 --
 -- AUTO_INCREMENT for table `unit_marks`
 --
 ALTER TABLE `unit_marks`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=20;
 
 --
 -- AUTO_INCREMENT for table `unit_registrations`
 --
 ALTER TABLE `unit_registrations`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
 
 --
 -- AUTO_INCREMENT for table `users`
 --
 ALTER TABLE `users`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=11;
 
 --
 -- Constraints for dumped tables
