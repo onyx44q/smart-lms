@@ -2,42 +2,33 @@
 session_start();
 include 'config.php';
 
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $email = $_POST['email'];
-    $password = $_POST['password']; 
-    $role = $_POST['role'];
+if ($_SERVER["REQUEST_METHOD"] !== "POST") {
+    header("Location: index.php"); exit();
+}
 
-    // Select the hashed password from the database to verify it
-    $stmt = $conn->prepare("SELECT id, full_name, role, password FROM users WHERE email=? AND role=?");
-    $stmt->bind_param("ss", $email, $role);
-    $stmt->execute();
-    $result = $stmt->get_result();
+$email    = mysqli_real_escape_string($conn, trim($_POST['email']    ?? ''));
+$password = trim($_POST['password'] ?? '');
+$role     = mysqli_real_escape_string($conn, trim($_POST['role']     ?? ''));
 
-    if ($user = $result->fetch_assoc()) {
-        // Verify the password against the hash stored in the DB
-        if (password_verify($password, $user['password'])) {
-            $_SESSION['user_id'] = $user['id'];
-            $_SESSION['user_name'] = $user['full_name'];
-            $_SESSION['role'] = $user['role'];
+$result = mysqli_query($conn,
+    "SELECT id, full_name, role, password FROM users WHERE email='$email' AND role='$role' LIMIT 1");
 
-            // Redirect with the 'success' status flag for the dashboard toast
-            if ($role == 'admin') {
-                header("Location: admin_dashboard.php?status=success");
-            } elseif ($role == 'lecturer') {
-                header("Location: lecturer_dashboard.php?status=success");
-            } else {
-                header("Location: student_dashboard.php?status=success");
-            }
-            exit();
-        } else {
-            // Password incorrect
-            header("Location: index.php?error=invalid");
-            exit();
+if ($result && mysqli_num_rows($result) === 1) {
+    $user = mysqli_fetch_assoc($result);
+    if (password_verify($password, $user['password'])) {
+        $_SESSION['user_id']   = $user['id'];
+        $_SESSION['user_name'] = $user['full_name'];
+        $_SESSION['role']      = $user['role'];
+
+        switch ($user['role']) {
+            case 'admin':                header("Location: admin_dashboard.php");     break;
+            case 'lecturer':             header("Location: lecturer_dashboard.php");  break;
+            case 'financial_accountant': header("Location: financial_dashboard.php"); break;
+            default:                     header("Location: student_dashboard.php");   break;
         }
-    } else {
-        // User not found or role mismatch
-        header("Location: index.php?error=invalid");
         exit();
     }
 }
-?>
+
+header("Location: index.php?error=invalid");
+exit();

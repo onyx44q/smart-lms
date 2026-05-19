@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: May 09, 2026 at 10:54 PM
+-- Generation Time: May 18, 2026 at 11:46 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -87,7 +87,9 @@ CREATE TABLE `attendance_records` (
 --
 
 INSERT INTO `attendance_records` (`id`, `session_id`, `student_id`, `status`, `marked_at`) VALUES
-(1, 1, 1, 'present', '2026-05-09 20:46:04');
+(1, 1, 1, 'present', '2026-05-09 20:46:04'),
+(4, 2, 1, 'present', '2026-05-09 20:57:36'),
+(7, 3, 1, 'absent', '2026-05-10 08:43:42');
 
 -- --------------------------------------------------------
 
@@ -109,7 +111,9 @@ CREATE TABLE `attendance_sessions` (
 --
 
 INSERT INTO `attendance_sessions` (`id`, `unit_id`, `lecturer_id`, `session_date`, `title`, `created_at`) VALUES
-(1, 1, 5, '2026-05-09', 'Lecture', '2026-05-09 20:45:18');
+(1, 1, 5, '2026-05-09', 'Lecture', '2026-05-09 20:45:18'),
+(2, 2, 9, '2026-05-09', 'Lecture', '2026-05-09 20:57:17'),
+(3, 2, 9, '2026-05-10', 'Lecture', '2026-05-10 08:25:43');
 
 -- --------------------------------------------------------
 
@@ -178,6 +182,88 @@ CREATE TABLE `enrollments` (
 INSERT INTO `enrollments` (`id`, `student_id`, `course_id`, `enroll_date`) VALUES
 (3, 1, 1, '2026-04-12 13:20:43'),
 (8, 1, 3, '2026-05-01 13:58:05');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `fee_payments`
+--
+
+CREATE TABLE `fee_payments` (
+  `id` int(11) NOT NULL,
+  `student_id` int(11) NOT NULL,
+  `fee_assignment_id` int(11) DEFAULT NULL,
+  `amount_paid` decimal(12,2) NOT NULL,
+  `payment_method` enum('cash','bank_transfer','mpesa','cheque','online','scholarship') NOT NULL DEFAULT 'cash',
+  `transaction_ref` varchar(100) DEFAULT NULL,
+  `receipt_number` varchar(50) DEFAULT NULL,
+  `notes` text DEFAULT NULL,
+  `payment_date` date NOT NULL,
+  `recorded_by` int(11) NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `fee_payments`
+--
+
+INSERT INTO `fee_payments` (`id`, `student_id`, `fee_assignment_id`, `amount_paid`, `payment_method`, `transaction_ref`, `receipt_number`, `notes`, `payment_date`, `recorded_by`, `created_at`) VALUES
+(1, 1, NULL, 45000.00, 'cheque', 'QK-7', 'RCP-2026-00001', 'Well received', '2026-05-18', 12, '2026-05-18 09:33:08'),
+(2, 1, NULL, 53000.00, 'cash', '', 'RCP-2026-00002', 'Well received', '2026-05-18', 12, '2026-05-18 09:43:10');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `fee_reminders`
+--
+
+CREATE TABLE `fee_reminders` (
+  `id` int(11) NOT NULL,
+  `student_id` int(11) NOT NULL,
+  `message` text NOT NULL,
+  `sent_by` int(11) NOT NULL,
+  `is_read` tinyint(1) NOT NULL DEFAULT 0,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `fee_reminders`
+--
+
+INSERT INTO `fee_reminders` (`id`, `student_id`, `message`, `sent_by`, `is_read`, `created_at`) VALUES
+(1, 1, 'Dear Onyx Courtney,\r\n\r\nYour current outstanding fee balance is KES 45,000. Please settle this amount by visiting the Finance Office or using the student portal.\r\n\r\nThank you.\r\nFinance Department', 12, 1, '2026-05-18 09:31:46'),
+(2, 1, 'Dear Onyx Courtney,\r\n\r\nYour current outstanding fee balance is KES 3,500. Please settle this amount by visiting the Finance Office or using the student portal.\r\n\r\nThank you.\r\nFinance Department', 12, 1, '2026-05-18 09:37:18');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `fee_structures`
+--
+
+CREATE TABLE `fee_structures` (
+  `id` int(11) NOT NULL,
+  `name` varchar(255) NOT NULL,
+  `description` text DEFAULT NULL,
+  `amount` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `fee_category` enum('tuition','examination','library','accommodation','transport','medical','activity','other') NOT NULL DEFAULT 'tuition',
+  `academic_year` varchar(20) NOT NULL,
+  `semester` enum('Semester 1','Semester 2','Full Year','One Time') NOT NULL DEFAULT 'Semester 1',
+  `course_id` int(11) DEFAULT NULL,
+  `is_mandatory` tinyint(1) NOT NULL DEFAULT 1,
+  `created_by` int(11) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `fee_structures`
+--
+
+INSERT INTO `fee_structures` (`id`, `name`, `description`, `amount`, `fee_category`, `academic_year`, `semester`, `course_id`, `is_mandatory`, `created_by`, `created_at`) VALUES
+(1, 'Semester 1 Tuition Fee 2025/26', 'Main tuition fee for Semester 1', 45000.00, 'tuition', '2025/2026', 'Semester 1', NULL, 1, NULL, '2026-05-17 18:34:20'),
+(2, 'Semester 2 Tuition Fee 2025/26', 'Main tuition fee for Semester 2', 45000.00, 'tuition', '2025/2026', 'Semester 2', NULL, 1, NULL, '2026-05-17 18:34:20'),
+(3, 'Examination Fee 2025/26', 'End of year examination registration', 3500.00, 'examination', '2025/2026', 'Full Year', NULL, 1, NULL, '2026-05-17 18:34:20'),
+(4, 'Library Access Fee 2025/26', 'Annual library membership and resources', 1500.00, 'library', '2025/2026', 'Full Year', NULL, 1, NULL, '2026-05-17 18:34:20'),
+(5, 'Student Activity Fee 2025/26', 'Student union and extracurricular', 1000.00, 'activity', '2025/2026', 'Full Year', NULL, 0, NULL, '2026-05-17 18:34:20');
 
 -- --------------------------------------------------------
 
@@ -538,6 +624,36 @@ INSERT INTO `student_answers` (`id`, `result_id`, `student_id`, `question_id`, `
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `student_fee_assignments`
+--
+
+CREATE TABLE `student_fee_assignments` (
+  `id` int(11) NOT NULL,
+  `student_id` int(11) NOT NULL,
+  `fee_structure_id` int(11) NOT NULL,
+  `total_amount` decimal(12,2) NOT NULL,
+  `discount_amount` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `discount_reason` varchar(255) DEFAULT NULL,
+  `net_amount` decimal(12,2) NOT NULL,
+  `academic_year` varchar(20) NOT NULL,
+  `semester` varchar(50) NOT NULL,
+  `due_date` date DEFAULT NULL,
+  `status` enum('pending','partial','paid','overdue','waived') NOT NULL DEFAULT 'pending',
+  `assigned_by` int(11) DEFAULT NULL,
+  `assigned_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `student_fee_assignments`
+--
+
+INSERT INTO `student_fee_assignments` (`id`, `student_id`, `fee_structure_id`, `total_amount`, `discount_amount`, `discount_reason`, `net_amount`, `academic_year`, `semester`, `due_date`, `status`, `assigned_by`, `assigned_at`) VALUES
+(1, 1, 1, 45000.00, 0.00, '', 45000.00, '2025/2026', 'Semester 1', '2026-06-18', 'pending', 12, '2026-05-18 09:31:14'),
+(2, 1, 3, 3500.00, 0.00, '', 3500.00, '2025/2026', 'Full Year', '2026-06-18', 'pending', 12, '2026-05-18 09:36:20');
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `student_marks`
 --
 
@@ -581,9 +697,9 @@ CREATE TABLE `student_mastery` (
 --
 
 INSERT INTO `student_mastery` (`id`, `student_id`, `course_id`, `skill_name`, `mastery_level`, `last_updated`) VALUES
-(385, 1, NULL, 'General Aptitude', 25.50, '2026-05-09 20:51:42'),
-(386, 1, NULL, 'Practical Application', 3.20, '2026-05-09 20:51:42'),
-(387, 1, NULL, 'Core Theory', 17.00, '2026-05-09 20:51:42');
+(385, 1, NULL, 'General Aptitude', 25.50, '2026-05-18 09:24:32'),
+(386, 1, NULL, 'Practical Application', 3.20, '2026-05-18 09:24:32'),
+(387, 1, NULL, 'Core Theory', 17.00, '2026-05-18 09:24:33');
 
 -- --------------------------------------------------------
 
@@ -690,7 +806,7 @@ CREATE TABLE `users` (
   `full_name` varchar(100) NOT NULL,
   `email` varchar(100) NOT NULL,
   `password` varchar(255) NOT NULL,
-  `role` enum('student','lecturer','admin') NOT NULL,
+  `role` enum('student','lecturer','admin','financial_accountant') NOT NULL DEFAULT 'student',
   `course_id` int(11) DEFAULT NULL,
   `career_path` varchar(100) DEFAULT 'General Software Engineering',
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
@@ -704,7 +820,8 @@ INSERT INTO `users` (`id`, `full_name`, `email`, `password`, `role`, `course_id`
 (1, 'Onyx Courtney', 'onyxcakech@gmail.com', '$2y$10$tqFkEQBk0iK.hsyVHVtis.bms/WrdhRdsLQ7ze/jO3kdaQDsph3tW', 'student', NULL, 'Software Development', '2026-04-11 20:58:11'),
 (4, 'System Admin', 'admin@smartlms.com', '$2y$10$.0OcfG4sTRsAOCtxn8iar.okY99T57aQvvMlv.yNYBNdmCbfViUtm', 'admin', NULL, 'General Software Engineering', '2026-04-11 21:45:41'),
 (5, 'Dr.smith', 'smith@gmail.com', '$2y$10$fZ1f6rlrYqK2LDDUM5DQxe2NWJbSRqjcVMchKntrQKTDgrf8Dk5hO', 'lecturer', 1, 'General Software Engineering', '2026-04-11 22:17:33'),
-(9, 'Lenny', 'lenny@gmail.com', '$2y$10$zISpLktT6AecVDh54Ugvqer4pvCa6fzYAEJchUoAtFfY9KrnKPsWa', 'lecturer', 3, 'General Software Engineering', '2026-04-30 18:02:11');
+(9, 'Lenny', 'lenny@gmail.com', '$2y$10$zISpLktT6AecVDh54Ugvqer4pvCa6fzYAEJchUoAtFfY9KrnKPsWa', 'lecturer', 3, 'General Software Engineering', '2026-04-30 18:02:11'),
+(12, 'Finance Office', 'finance@smartlms.com', '$2y$10$.A.HAqAdJVcR8Kqn/VFO7u/aDcEKYi0ZN6dEtj7IZ.HmMeyvyUC26', 'financial_accountant', NULL, 'General Software Engineering', '2026-05-18 09:29:22');
 
 -- --------------------------------------------------------
 
@@ -796,6 +913,30 @@ ALTER TABLE `enrollments`
   ADD KEY `course_id` (`course_id`);
 
 --
+-- Indexes for table `fee_payments`
+--
+ALTER TABLE `fee_payments`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_student` (`student_id`),
+  ADD KEY `idx_date` (`payment_date`),
+  ADD KEY `idx_receipt` (`receipt_number`);
+
+--
+-- Indexes for table `fee_reminders`
+--
+ALTER TABLE `fee_reminders`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_student` (`student_id`);
+
+--
+-- Indexes for table `fee_structures`
+--
+ALTER TABLE `fee_structures`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_course` (`course_id`),
+  ADD KEY `idx_year` (`academic_year`);
+
+--
 -- Indexes for table `materials`
 --
 ALTER TABLE `materials`
@@ -862,6 +1003,15 @@ ALTER TABLE `student_answers`
   ADD KEY `student_id` (`student_id`),
   ADD KEY `result_id` (`result_id`),
   ADD KEY `question_id` (`question_id`);
+
+--
+-- Indexes for table `student_fee_assignments`
+--
+ALTER TABLE `student_fee_assignments`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uq_stu_fee` (`student_id`,`fee_structure_id`),
+  ADD KEY `idx_student` (`student_id`),
+  ADD KEY `idx_status` (`status`);
 
 --
 -- Indexes for table `student_marks`
@@ -939,13 +1089,13 @@ ALTER TABLE `assignment_submissions`
 -- AUTO_INCREMENT for table `attendance_records`
 --
 ALTER TABLE `attendance_records`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10;
 
 --
 -- AUTO_INCREMENT for table `attendance_sessions`
 --
 ALTER TABLE `attendance_sessions`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
 
 --
 -- AUTO_INCREMENT for table `courses`
@@ -964,6 +1114,24 @@ ALTER TABLE `course_units`
 --
 ALTER TABLE `enrollments`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
+
+--
+-- AUTO_INCREMENT for table `fee_payments`
+--
+ALTER TABLE `fee_payments`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+
+--
+-- AUTO_INCREMENT for table `fee_reminders`
+--
+ALTER TABLE `fee_reminders`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+
+--
+-- AUTO_INCREMENT for table `fee_structures`
+--
+ALTER TABLE `fee_structures`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
 
 --
 -- AUTO_INCREMENT for table `materials`
@@ -1020,6 +1188,12 @@ ALTER TABLE `student_answers`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=57;
 
 --
+-- AUTO_INCREMENT for table `student_fee_assignments`
+--
+ALTER TABLE `student_fee_assignments`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+
+--
 -- AUTO_INCREMENT for table `student_marks`
 --
 ALTER TABLE `student_marks`
@@ -1029,7 +1203,7 @@ ALTER TABLE `student_marks`
 -- AUTO_INCREMENT for table `student_mastery`
 --
 ALTER TABLE `student_mastery`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=526;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=691;
 
 --
 -- AUTO_INCREMENT for table `student_performance_logs`
@@ -1053,13 +1227,13 @@ ALTER TABLE `unit_marks`
 -- AUTO_INCREMENT for table `unit_registrations`
 --
 ALTER TABLE `unit_registrations`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
 
 --
 -- AUTO_INCREMENT for table `users`
 --
 ALTER TABLE `users`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=11;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=13;
 
 --
 -- Constraints for dumped tables

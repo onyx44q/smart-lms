@@ -109,6 +109,7 @@
                         <option value="student">Student</option>
                         <option value="lecturer">Lecturer</option>
                         <option value="admin">Admin</option>
+                        <option value="financial_accountant">Financial Accountant</option>
                     </select>
                 </div>
                 <div>

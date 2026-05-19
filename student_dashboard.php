@@ -223,6 +223,130 @@ if ($att_res) {
     }
 }
 $barred_count = count(array_filter($student_attendance, fn($a) => $a['barred']));
+
+// ══════════════════════════════════════════════════════════════════
+//  FINANCE MODULE — Fee & Payment Data
+// ══════════════════════════════════════════════════════════════════
+// Auto-create tables safely
+mysqli_query($conn, "CREATE TABLE IF NOT EXISTS `fee_structures` (
+  `id` INT(11) NOT NULL AUTO_INCREMENT, `name` VARCHAR(255) NOT NULL,
+  `description` TEXT DEFAULT NULL, `amount` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+  `fee_category` ENUM('tuition','examination','library','accommodation','transport','medical','activity','other') NOT NULL DEFAULT 'tuition',
+  `academic_year` VARCHAR(20) NOT NULL, `semester` ENUM('Semester 1','Semester 2','Full Year','One Time') NOT NULL DEFAULT 'Semester 1',
+  `course_id` INT(11) DEFAULT NULL, `is_mandatory` TINYINT(1) NOT NULL DEFAULT 1,
+  `created_by` INT(11) DEFAULT NULL, `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+mysqli_query($conn, "CREATE TABLE IF NOT EXISTS `student_fee_assignments` (
+  `id` INT(11) NOT NULL AUTO_INCREMENT, `student_id` INT(11) NOT NULL,
+  `fee_structure_id` INT(11) NOT NULL, `total_amount` DECIMAL(12,2) NOT NULL,
+  `discount_amount` DECIMAL(12,2) NOT NULL DEFAULT 0.00, `discount_reason` VARCHAR(255) DEFAULT NULL,
+  `net_amount` DECIMAL(12,2) NOT NULL, `academic_year` VARCHAR(20) NOT NULL,
+  `semester` VARCHAR(50) NOT NULL, `due_date` DATE DEFAULT NULL,
+  `status` ENUM('pending','partial','paid','overdue','waived') NOT NULL DEFAULT 'pending',
+  `assigned_by` INT(11) DEFAULT NULL, `assigned_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY `uq_stu_fee` (`student_id`, `fee_structure_id`), PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+mysqli_query($conn, "CREATE TABLE IF NOT EXISTS `fee_payments` (
+  `id` INT(11) NOT NULL AUTO_INCREMENT, `student_id` INT(11) NOT NULL,
+  `fee_assignment_id` INT(11) DEFAULT NULL, `amount_paid` DECIMAL(12,2) NOT NULL,
+  `payment_method` ENUM('cash','bank_transfer','mpesa','cheque','online','scholarship') NOT NULL DEFAULT 'cash',
+  `transaction_ref` VARCHAR(100) DEFAULT NULL, `receipt_number` VARCHAR(50) DEFAULT NULL,
+  `notes` TEXT DEFAULT NULL, `payment_date` DATE NOT NULL,
+  `recorded_by` INT(11) NOT NULL, `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+mysqli_query($conn, "CREATE TABLE IF NOT EXISTS `fee_reminders` (
+  `id` INT(11) NOT NULL AUTO_INCREMENT, `student_id` INT(11) NOT NULL,
+  `message` TEXT NOT NULL, `sent_by` INT(11) NOT NULL,
+  `is_read` TINYINT(1) NOT NULL DEFAULT 0, `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+// Mark reminders read on request
+if (isset($_POST['mark_reminders_read'])) {
+    mysqli_query($conn, "UPDATE fee_reminders SET is_read=1 WHERE student_id=$user_id");
+    header("Location: student_dashboard.php?status=success&msg=Reminders+cleared");
+    exit();
+}
+
+// ── Fetch fee assignments (without payment calc — we do it below) ──
+$fee_assignments_res = mysqli_query($conn,
+    "SELECT sfa.*, fs.name AS fee_name, fs.fee_category, fs.description AS fee_desc
+     FROM student_fee_assignments sfa
+     JOIN fee_structures fs ON fs.id=sfa.fee_structure_id
+     WHERE sfa.student_id=$user_id ORDER BY sfa.due_date ASC, sfa.assigned_at DESC");
+$fee_assignments = [];
+while ($fa = mysqli_fetch_assoc($fee_assignments_res)) $fee_assignments[] = $fa;
+
+// ── Total fees assigned ───────────────────────────────────────────
+$total_fees_assigned = array_sum(array_column($fee_assignments, 'net_amount'));
+
+// ── Total paid = ALL payments for this student (linked + general) ─
+$paid_row = mysqli_fetch_assoc(mysqli_query($conn,
+    "SELECT COALESCE(SUM(amount_paid),0) AS total FROM fee_payments WHERE student_id=$user_id"));
+$total_fees_paid_global = floatval($paid_row['total']);
+
+// ── Distribute payments sequentially across fee lines (FIFO) ─────
+// This correctly handles both linked payments and general payments.
+$remaining_credit = $total_fees_paid_global;
+foreach ($fee_assignments as &$fa) {
+    $net = floatval($fa['net_amount']);
+    if ($fa['status'] === 'waived') {
+        $fa['amount_paid'] = $net;
+        $fa['balance']     = 0;
+        continue;
+    }
+    if ($remaining_credit >= $net) {
+        $fa['amount_paid'] = $net;
+        $fa['balance']     = 0;
+        $remaining_credit -= $net;
+        // Sync DB status to paid
+        if ($fa['status'] !== 'paid') {
+            mysqli_query($conn, "UPDATE student_fee_assignments SET status='paid' WHERE id={$fa['id']}");
+            $fa['status'] = 'paid';
+        }
+    } elseif ($remaining_credit > 0) {
+        $fa['amount_paid'] = $remaining_credit;
+        $fa['balance']     = $net - $remaining_credit;
+        $remaining_credit  = 0;
+        // Sync DB status to partial
+        if ($fa['status'] !== 'partial') {
+            mysqli_query($conn, "UPDATE student_fee_assignments SET status='partial' WHERE id={$fa['id']}");
+            $fa['status'] = 'partial';
+        }
+    } else {
+        $fa['amount_paid'] = 0;
+        $fa['balance']     = $net;
+        // Check overdue
+        if (!empty($fa['due_date']) && strtotime($fa['due_date']) < time() && $fa['status'] !== 'overdue') {
+            mysqli_query($conn, "UPDATE student_fee_assignments SET status='overdue' WHERE id={$fa['id']}");
+            $fa['status'] = 'overdue';
+        }
+    }
+}
+unset($fa);
+
+// ── Summary totals ────────────────────────────────────────────────
+$total_fees_paid    = min($total_fees_paid_global, $total_fees_assigned);
+$total_fee_balance  = max(0, $total_fees_assigned - $total_fees_paid_global);
+$fee_collection_pct = $total_fees_assigned > 0
+    ? min(100, round(($total_fees_paid_global / $total_fees_assigned) * 100)) : 0;
+$has_overdue_fees   = !empty(array_filter($fee_assignments, fn($f) => $f['status'] === 'overdue'));
+
+// Payment history
+$fee_payments_history = [];
+$fph_res = mysqli_query($conn,
+    "SELECT fp.*, COALESCE(fs.name,'General Payment') AS fee_name, u.full_name AS recorded_by_name
+     FROM fee_payments fp
+     LEFT JOIN student_fee_assignments sfa ON sfa.id=fp.fee_assignment_id
+     LEFT JOIN fee_structures fs ON fs.id=sfa.fee_structure_id
+     JOIN users u ON u.id=fp.recorded_by
+     WHERE fp.student_id=$user_id ORDER BY fp.payment_date DESC");
+if ($fph_res) while ($r = mysqli_fetch_assoc($fph_res)) $fee_payments_history[] = $r;
+
+// Reminders
+$fee_reminders = [];
+$fr_res = mysqli_query($conn, "SELECT * FROM fee_reminders WHERE student_id=$user_id ORDER BY created_at DESC");
+if ($fr_res) while ($r = mysqli_fetch_assoc($fr_res)) $fee_reminders[] = $r;
+$unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read']));
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -368,6 +492,16 @@ $barred_count = count(array_filter($student_attendance, fn($a) => $a['barred']))
             <a href="javascript:void(0)" onclick="switchView('my-attendance')" id="nav-my-attendance" class="sidebar-item flex items-center space-x-3 p-3 rounded-xl transition-all text-slate-500">
                 <i class="fa-solid fa-calendar-check w-5"></i>
                 <span class="text-xs uppercase tracking-wider">Attendance</span>
+            </a>
+
+            <a href="javascript:void(0)" onclick="switchView('my-fees')" id="nav-my-fees" class="sidebar-item flex items-center space-x-3 p-3 rounded-xl transition-all text-slate-500">
+                <i class="fa-solid fa-coins w-5" style="color:#10b981;"></i>
+                <span class="text-xs uppercase tracking-wider">Fees &amp; Payments</span>
+                <?php if ($unread_reminders > 0 || $has_overdue_fees): ?>
+                <span style="margin-left:auto;background:#ef4444;color:#fff;font-size:9px;font-weight:800;padding:2px 7px;border-radius:10px;"><?php echo $unread_reminders > 0 ? $unread_reminders : '!'; ?></span>
+                <?php elseif ($total_fee_balance > 0): ?>
+                <span style="margin-left:auto;background:#f59e0b;color:#fff;font-size:9px;font-weight:800;padding:2px 7px;border-radius:10px;">DUE</span>
+                <?php endif; ?>
             </a>
 
             <div id="course-dropdown">
@@ -1300,20 +1434,32 @@ $barred_count = count(array_filter($student_attendance, fn($a) => $a['barred']))
         <!-- END MY RESULTS -->
 
         <!-- ── MY ATTENDANCE ──────────────────────────────────────────── -->
-        <div id="view-my-attendance" class="view-section p-6 lg:p-8">
-            <div class="mb-7">
-                <h2 class="text-2xl font-black text-slate-900">My Attendance</h2>
-                <p class="text-slate-500 text-xs mt-1">Track your attendance per unit. Students with more than 33.33% absences are barred from sitting the exam.</p>
+        <div id="view-my-attendance" class="view-section p-4 lg:p-8">
+            <style>
+            .att-course-tab { display:inline-flex; align-items:center; gap:7px; padding:8px 16px; border-radius:10px; font-size:12px; font-weight:700; cursor:pointer; border:1.5px solid #e2e8f0; background:#fff; color:#64748b; transition:all .2s; white-space:nowrap; }
+            .att-course-tab:hover { border-color:#3b82f6; color:#3b82f6; background:#eff6ff; }
+            .att-course-tab.active { background:#3b82f6; color:#fff; border-color:#3b82f6; box-shadow:0 4px 12px rgba(59,130,246,.3); }
+            .att-unit-card { background:#fff; border-radius:18px; border:1.5px solid #e2e8f0; overflow:hidden; margin-bottom:14px; transition:box-shadow .2s; }
+            .att-unit-card:hover { box-shadow:0 6px 20px rgba(0,0,0,.07); }
+            .att-unit-card.barred { border-color:#fca5a5; background:#fff8f8; }
+            @keyframes attIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
+            .att-unit-card { animation:attIn .35s ease forwards; }
+            </style>
+
+            <!-- Header -->
+            <div class="mb-5">
+                <h2 class="text-xl font-black text-slate-900 lg:text-2xl">My Attendance</h2>
+                <p class="text-slate-400 text-xs mt-1">Click a course tab to view its unit attendance. Absences above 33.33% = exam barred.</p>
             </div>
 
             <?php if ($barred_count > 0): ?>
-            <div class="mb-6 bg-red-50 border border-red-200 rounded-2xl p-5 flex items-start space-x-4">
-                <div class="w-10 h-10 bg-red-100 rounded-xl flex items-center justify-center flex-shrink-0">
-                    <i class="fa-solid fa-triangle-exclamation text-red-500"></i>
+            <div class="mb-5 bg-red-50 border border-red-200 rounded-2xl p-4 flex items-start gap-3">
+                <div class="w-9 h-9 bg-red-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                    <i class="fa-solid fa-triangle-exclamation text-red-500 text-sm"></i>
                 </div>
                 <div>
-                    <p class="font-black text-red-700">⚠️ Exam Bar Warning</p>
-                    <p class="text-red-500 text-sm mt-1">You have exceeded the 33.33% absence threshold in <strong><?php echo $barred_count; ?></strong> unit(s). You may not be allowed to sit the exam for those units.</p>
+                    <p class="font-black text-red-700 text-sm">⚠️ Exam Bar Warning</p>
+                    <p class="text-red-500 text-xs mt-1">You exceed 33.33% absence in <strong><?php echo $barred_count; ?></strong> unit(s) and may not sit the exam for those units.</p>
                 </div>
             </div>
             <?php endif; ?>
@@ -1325,68 +1471,110 @@ $barred_count = count(array_filter($student_attendance, fn($a) => $a['barred']))
                 <p class="text-slate-400 text-sm mt-1">Your lecturer hasn't recorded any sessions yet.</p>
             </div>
             <?php else: ?>
-            <div class="space-y-4">
-                <?php foreach ($student_attendance as $att): ?>
-                <?php
-                    $apct  = floatval($att['absence_pct'] ?? 0);
-                    $ppct  = $att['total_sessions'] > 0 ? round(100 - $apct, 1) : 0;
+
+            <?php
+            // Group attendance records by course
+            $att_by_course = [];
+            foreach ($student_attendance as $att) {
+                $ct = $att['course_title'] ?? 'General';
+                if (!isset($att_by_course[$ct])) $att_by_course[$ct] = [];
+                $att_by_course[$ct][] = $att;
+            }
+            $course_keys = array_keys($att_by_course);
+            $first_course_id = 'att-course-0';
+            ?>
+
+            <!-- Course filter tabs -->
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;overflow-x:auto;padding-bottom:4px;">
+                <button class="att-course-tab active" onclick="filterAttCourse('all',this)">
+                    <i class="fa-solid fa-layer-group"></i> All Units
+                    <span style="background:rgba(255,255,255,.25);padding:1px 7px;border-radius:10px;font-size:10px;"><?php echo count($student_attendance); ?></span>
+                </button>
+                <?php foreach ($course_keys as $ci => $cname): ?>
+                <button class="att-course-tab" onclick="filterAttCourse('course-<?php echo $ci; ?>',this)">
+                    <i class="fa-solid fa-book-open"></i>
+                    <?php echo htmlspecialchars($cname); ?>
+                    <span style="background:#e2e8f0;color:#475569;padding:1px 7px;border-radius:10px;font-size:10px;"><?php echo count($att_by_course[$cname]); ?></span>
+                </button>
+                <?php endforeach; ?>
+            </div>
+
+            <!-- Unit cards (each tagged with course group) -->
+            <div id="att-cards-container">
+                <?php foreach ($student_attendance as $ai => $att):
+                    $apct   = floatval($att['absence_pct'] ?? 0);
+                    $ppct   = $att['total_sessions'] > 0 ? round(100 - $apct, 1) : 0;
                     $barred = $att['barred'];
-                    $color = $barred ? 'red' : ($apct > 20 ? 'amber' : 'emerald');
-                    $borderCls = $barred ? 'border-red-200 bg-red-50/30' : 'border-slate-100';
+                    $color  = $barred ? '#ef4444' : ($apct > 20 ? '#f59e0b' : '#10b981');
+                    $border = $barred ? 'barred' : '';
+                    // find which course index this unit belongs to
+                    $ci_key = array_search($att['course_title'] ?? 'General', $course_keys);
                 ?>
-                <div class="bg-white rounded-2xl border <?php echo $borderCls; ?> shadow-sm overflow-hidden">
-                    <div class="px-6 py-4 flex items-center justify-between border-b border-slate-100 bg-gradient-to-r from-slate-50 to-blue-50/20">
+                <div class="att-unit-card <?php echo $border; ?>"
+                     data-course="course-<?php echo $ci_key; ?>"
+                     style="animation-delay:<?php echo ($ai * 0.04); ?>s">
+
+                    <!-- Unit header -->
+                    <div style="padding:14px 20px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:linear-gradient(135deg,#f8fafc,#eff6ff20);">
                         <div>
-                            <div class="flex items-center gap-2 mb-0.5">
-                                <h3 class="font-black text-slate-900 text-sm"><?php echo htmlspecialchars($att['unit_title']); ?></h3>
+                            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                                <span style="font-weight:800;font-size:14px;color:#0f172a;"><?php echo htmlspecialchars($att['unit_title']); ?></span>
                                 <?php if ($att['unit_code']): ?>
-                                <span class="text-[9px] font-black bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-md"><?php echo htmlspecialchars($att['unit_code']); ?></span>
+                                <span style="background:#dbeafe;color:#1e40af;font-size:9px;font-weight:800;padding:2px 8px;border-radius:6px;letter-spacing:.05em;"><?php echo htmlspecialchars($att['unit_code']); ?></span>
                                 <?php endif; ?>
                             </div>
-                            <p class="text-[10px] text-slate-400"><?php echo htmlspecialchars($att['course_title']); ?></p>
+                            <div style="font-size:11px;color:#94a3b8;margin-top:3px;display:flex;align-items:center;gap:5px;">
+                                <i class="fa-solid fa-book" style="font-size:9px;"></i>
+                                <?php echo htmlspecialchars($att['course_title']); ?>
+                            </div>
                         </div>
                         <?php if ($att['total_sessions'] == 0): ?>
-                        <span class="text-[10px] font-black text-slate-300 border border-slate-200 px-3 py-1.5 rounded-xl">No Sessions Yet</span>
+                        <span style="font-size:10px;font-weight:800;color:#94a3b8;border:1.5px solid #e2e8f0;padding:5px 12px;border-radius:10px;">No Sessions Yet</span>
                         <?php elseif ($barred): ?>
-                        <span class="text-[10px] font-black text-red-600 bg-red-50 border border-red-200 px-3 py-1.5 rounded-xl animate-pulse"><i class="fa-solid fa-ban mr-1"></i>EXAM BARRED</span>
+                        <span style="font-size:10px;font-weight:800;color:#dc2626;background:#fee2e2;border:1.5px solid #fca5a5;padding:5px 12px;border-radius:10px;animation:pulse 2s infinite;">
+                            <i class="fa-solid fa-ban"></i> EXAM BARRED
+                        </span>
                         <?php else: ?>
-                        <span class="text-[10px] font-black text-emerald-600 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl"><i class="fa-solid fa-circle-check mr-1"></i>Exam Eligible</span>
+                        <span style="font-size:10px;font-weight:800;color:#059669;background:#d1fae5;border:1.5px solid #6ee7b7;padding:5px 12px;border-radius:10px;">
+                            <i class="fa-solid fa-circle-check"></i> Exam Eligible
+                        </span>
                         <?php endif; ?>
                     </div>
-                    <div class="px-6 py-5">
+
+                    <!-- Unit body -->
+                    <div style="padding:16px 20px;">
                         <?php if ($att['total_sessions'] == 0): ?>
-                        <p class="text-slate-400 text-xs text-center py-2 italic">Your lecturer hasn't recorded attendance for this unit yet.</p>
+                        <p style="color:#94a3b8;font-size:12px;text-align:center;padding:10px 0;font-style:italic;">No attendance sessions recorded yet.</p>
                         <?php else: ?>
-                        <!-- Stats row -->
-                        <div class="grid grid-cols-3 gap-4 mb-4">
-                            <div class="text-center">
-                                <p class="text-2xl font-black text-slate-900"><?php echo intval($att['total_sessions']); ?></p>
-                                <p class="text-[10px] font-black uppercase text-slate-400">Total Sessions</p>
+                        <!-- Stats -->
+                        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px;">
+                            <div style="text-align:center;background:#f8fafc;border-radius:12px;padding:12px 8px;">
+                                <div style="font-size:22px;font-weight:900;color:#0f172a;"><?php echo intval($att['total_sessions']); ?></div>
+                                <div style="font-size:9px;font-weight:800;text-transform:uppercase;color:#94a3b8;letter-spacing:.06em;margin-top:2px;">Sessions</div>
                             </div>
-                            <div class="text-center">
-                                <p class="text-2xl font-black text-emerald-600"><?php echo intval($att['attended']); ?></p>
-                                <p class="text-[10px] font-black uppercase text-slate-400">Attended</p>
+                            <div style="text-align:center;background:#f0fdf4;border-radius:12px;padding:12px 8px;">
+                                <div style="font-size:22px;font-weight:900;color:#10b981;"><?php echo intval($att['attended']); ?></div>
+                                <div style="font-size:9px;font-weight:800;text-transform:uppercase;color:#94a3b8;letter-spacing:.06em;margin-top:2px;">Attended</div>
                             </div>
-                            <div class="text-center">
-                                <p class="text-2xl font-black text-<?php echo $color; ?>-600"><?php echo intval($att['absences']); ?></p>
-                                <p class="text-[10px] font-black uppercase text-slate-400">Absent</p>
+                            <div style="text-align:center;background:<?php echo $barred?'#fef2f2':($apct>20?'#fffbeb':'#f8fafc'); ?>;border-radius:12px;padding:12px 8px;">
+                                <div style="font-size:22px;font-weight:900;color:<?php echo $color; ?>;"><?php echo intval($att['absences']); ?></div>
+                                <div style="font-size:9px;font-weight:800;text-transform:uppercase;color:#94a3b8;letter-spacing:.06em;margin-top:2px;">Absent</div>
                             </div>
                         </div>
-                        <!-- Attendance progress bar -->
-                        <div class="space-y-1.5">
-                            <div class="flex justify-between text-[10px] font-black uppercase">
-                                <span class="text-emerald-500">Attendance: <?php echo $ppct; ?>%</span>
-                                <span class="text-<?php echo $color; ?>-500">Absences: <?php echo $apct; ?>%
-                                    <?php if ($barred): ?><span class="text-red-600 ml-1">(exceeds 33.33% limit)</span><?php endif; ?>
-                                </span>
+                        <!-- Progress bar -->
+                        <div>
+                            <div style="display:flex;justify-content:space-between;font-size:10px;font-weight:800;text-transform:uppercase;margin-bottom:5px;">
+                                <span style="color:#10b981;">Present: <?php echo $ppct; ?>%</span>
+                                <span style="color:<?php echo $color; ?>;">Absent: <?php echo $apct; ?>%<?php if($barred): ?> ⚠<?php endif; ?></span>
                             </div>
-                            <div class="h-3 bg-slate-100 rounded-full overflow-hidden flex">
-                                <div class="h-full bg-emerald-400 transition-all duration-1000" style="width:<?php echo $ppct; ?>%"></div>
-                                <div class="h-full bg-<?php echo $color; ?>-400 transition-all duration-1000" style="width:<?php echo min(100,$apct); ?>%"></div>
+                            <div style="height:10px;background:#f1f5f9;border-radius:9999px;overflow:hidden;display:flex;">
+                                <div style="width:<?php echo $ppct; ?>%;background:#10b981;height:100%;border-radius:9999px 0 0 9999px;transition:width 1s ease;"></div>
+                                <div style="width:<?php echo min(100,$apct); ?>%;background:<?php echo $color; ?>;height:100%;transition:width 1s ease;"></div>
                             </div>
-                            <div class="flex items-center">
-                                <div class="h-1 bg-red-400 opacity-40" style="width:33.33%;margin-left:0"></div>
-                                <span class="text-[8px] text-red-400 ml-1 font-bold">33.33% limit</span>
+                            <!-- 33.33% marker -->
+                            <div style="position:relative;margin-top:4px;">
+                                <div style="position:absolute;left:33.33%;width:2px;height:8px;background:#ef4444;opacity:.5;border-radius:1px;top:-12px;"></div>
+                                <div style="font-size:9px;color:#ef4444;opacity:.7;padding-left:calc(33.33% - 20px);">33.33% limit</div>
                             </div>
                         </div>
                         <?php endif; ?>
@@ -1394,11 +1582,430 @@ $barred_count = count(array_filter($student_attendance, fn($a) => $a['barred']))
                 </div>
                 <?php endforeach; ?>
             </div>
+
             <?php endif; ?>
+
+            <script>
+            function filterAttCourse(group, btn) {
+                // Update active tab
+                document.querySelectorAll('.att-course-tab').forEach(t => t.classList.remove('active'));
+                btn.classList.add('active');
+
+                // Show/hide cards
+                document.querySelectorAll('#att-cards-container .att-unit-card').forEach(card => {
+                    if (group === 'all' || card.dataset.course === group) {
+                        card.style.display = '';
+                        // Re-trigger animation
+                        card.style.animation = 'none';
+                        card.offsetHeight;
+                        card.style.animation = '';
+                    } else {
+                        card.style.display = 'none';
+                    }
+                });
+            }
+            </script>
         </div>
         <!-- END MY ATTENDANCE -->
 
-    <div id="chatbot-container">
+
+    <!-- ══════════════════════════════════════════════════════════════ -->
+    <!-- FEES & PAYMENTS SECTION -->
+    <!-- ══════════════════════════════════════════════════════════════ -->
+    <div id="view-my-fees" class="view-section">
+    <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
+
+    /* ── Wrapper ──────────────────────────────────────────────── */
+    .fp-wrap { padding:16px; max-width:1100px; margin:0 auto; }
+    @media(min-width:640px){ .fp-wrap { padding:24px; } }
+    @media(min-width:1024px){ .fp-wrap { padding:32px 36px; } }
+
+    /* ── KPI grid ─────────────────────────────────────────────── */
+    .fp-kpi-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:20px; }
+    @media(min-width:768px){ .fp-kpi-grid { grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:24px; } }
+
+    .fp-kpi { background:#fff; border:1px solid #e2e8f0; border-radius:14px; padding:14px 16px; position:relative; overflow:hidden; }
+    .fp-kpi .bar { position:absolute; top:0;left:0;right:0;height:3px; }
+    .fp-kpi-label { font-size:9px; font-weight:800; text-transform:uppercase; letter-spacing:.1em; color:#94a3b8; }
+    .fp-kpi-val { font-family:'JetBrains Mono',monospace; font-size:19px; font-weight:900; margin:6px 0 3px; line-height:1.1; }
+    @media(min-width:640px){ .fp-kpi-val { font-size:22px; } }
+    .fp-kpi-sub { font-size:10px; margin-top:3px; }
+    .fp-prog { height:6px; border-radius:9999px; background:#f1f5f9; overflow:hidden; margin-top:6px; }
+    .fp-prog-fill { height:100%; border-radius:9999px; transition:width 1.4s cubic-bezier(.22,1,.36,1); }
+
+    /* ── Cleared banner ───────────────────────────────────────── */
+    .fp-cleared { background:linear-gradient(135deg,#ecfdf5,#d1fae5); border:2px solid #6ee7b7; border-radius:18px; padding:24px 20px; text-align:center; margin-bottom:20px; }
+    @media(min-width:640px){ .fp-cleared { padding:28px 40px; } }
+    .fp-cleared-icon { width:60px;height:60px;background:linear-gradient(135deg,#10b981,#34d399);border-radius:18px;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;box-shadow:0 8px 20px rgba(16,185,129,.3); }
+    .fp-cleared-title { font-size:22px;font-weight:900;color:#065f46;letter-spacing:-.5px; }
+    .fp-cleared-sub { font-size:13px;color:#059669;margin-top:4px; }
+    .fp-cleared-stamp { display:inline-flex;align-items:center;gap:6px;background:#10b981;color:#fff;font-size:12px;font-weight:800;padding:7px 18px;border-radius:30px;margin-top:12px; }
+
+    /* ── Section card ─────────────────────────────────────────── */
+    .fp-card { background:#fff; border:1px solid #e2e8f0; border-radius:18px; overflow:hidden; margin-bottom:18px; }
+    .fp-card-head { padding:14px 18px; border-bottom:1px solid #f1f5f9; display:flex; align-items:center; gap:10px; }
+    @media(min-width:640px){ .fp-card-head { padding:16px 22px; } }
+    .fp-card-icon { width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0; }
+    .fp-card-title { font-size:14px;font-weight:800;color:#0f172a; }
+    .fp-card-sub { font-size:11px;color:#94a3b8;margin-top:1px; }
+
+    /* ── Reminder banner ──────────────────────────────────────── */
+    .fp-reminder { background:linear-gradient(135deg,#fffbeb,#fef3c7); border:1.5px solid #fcd34d; border-radius:14px; padding:14px 18px; margin-bottom:12px; display:flex; align-items:flex-start; gap:12px; }
+
+    /* ── Status badges ────────────────────────────────────────── */
+    .fp-badge { display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:20px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap; }
+    .fp-badge-cleared { background:#d1fae5; color:#065f46; }
+    .fp-badge-paid    { background:#d1fae5; color:#065f46; }
+    .fp-badge-partial { background:#fef3c7; color:#92400e; }
+    .fp-badge-pending { background:#f1f5f9; color:#475569; }
+    .fp-badge-overdue { background:#fee2e2; color:#991b1b; }
+    .fp-badge-waived  { background:#ede9fe; color:#4c1d95; }
+
+    /* ── Desktop table ────────────────────────────────────────── */
+    .fp-tbl-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+    .fp-tbl { width:100%; border-collapse:collapse; min-width:600px; }
+    .fp-tbl th { background:#f8fafc; padding:9px 14px; text-align:left; font-size:10px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:#64748b; border-bottom:1px solid #e2e8f0; white-space:nowrap; }
+    .fp-tbl td { padding:12px 14px; border-bottom:1px solid #f8fafc; font-size:13px; vertical-align:middle; }
+    .fp-tbl tr:last-child td { border-bottom:none; }
+    .fp-tbl tr:hover td { background:#fafafa; }
+    .fp-mono { font-family:'JetBrains Mono',monospace; }
+
+    /* ── Mobile fee cards ─────────────────────────────────────── */
+    .fp-mob-list { display:none; padding:12px; }
+    .fp-mob-item { border:1px solid #e2e8f0; border-radius:14px; padding:14px 16px; margin-bottom:10px; }
+    .fp-mob-item:last-child { margin-bottom:0; }
+    .fp-mob-top { display:flex; align-items:flex-start; justify-content:space-between; gap:8px; margin-bottom:10px; }
+    .fp-mob-name { font-weight:700; font-size:13px; color:#0f172a; }
+    .fp-mob-row { display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid #f8fafc; }
+    .fp-mob-row:last-child { border-bottom:none; padding-bottom:0; }
+    .fp-mob-key { font-size:11px; font-weight:600; color:#94a3b8; }
+    .fp-mob-val { font-size:12px; font-weight:700; color:#0f172a; text-align:right; }
+
+    /* ── Mobile payment cards ─────────────────────────────────── */
+    .fp-pay-mob-list { display:none; padding:12px; }
+    .fp-pay-mob-item { border:1px solid #e2e8f0; border-radius:14px; padding:14px 16px; margin-bottom:10px; }
+
+    /* ── Switch show/hide at 640px ────────────────────────────── */
+    @media(max-width:640px){
+        .fp-tbl-wrap  { display:none !important; }
+        .fp-mob-list  { display:block !important; }
+        .fp-pay-tbl   { display:none !important; }
+        .fp-pay-mob-list { display:block !important; }
+    }
+
+    @keyframes fpSlide { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:none} }
+    .fp-anim { animation:fpSlide .4s ease forwards; }
+    </style>
+
+    <div class="fp-wrap fp-anim">
+
+        <!-- ── Page header ──────────────────────────────────── -->
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:20px;">
+            <div>
+                <h1 style="font-size:20px;font-weight:900;color:#0f172a;letter-spacing:-.4px;margin:0;">Fees &amp; Payments</h1>
+                <p style="font-size:12px;color:#64748b;margin:3px 0 0;"><?php echo date('F Y'); ?> &nbsp;·&nbsp; Your financial account</p>
+            </div>
+            <?php if ($unread_reminders > 0): ?>
+            <form method="POST" style="flex-shrink:0;">
+                <input type="hidden" name="mark_reminders_read" value="1">
+                <button type="submit" style="display:flex;align-items:center;gap:7px;background:#fef3c7;border:1.5px solid #fcd34d;color:#92400e;padding:8px 14px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;">
+                    <i class="fa-solid fa-bell"></i>
+                    <?php echo $unread_reminders; ?> New Reminder<?php echo $unread_reminders>1?'s':''; ?>
+                </button>
+            </form>
+            <?php endif; ?>
+        </div>
+
+        <!-- ── Reminders ────────────────────────────────────── -->
+        <?php foreach (array_filter($fee_reminders, fn($r)=>!$r['is_read']) as $rem): ?>
+        <div class="fp-reminder">
+            <div style="width:32px;height:32px;border-radius:9px;background:#f59e0b;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <i class="fa-solid fa-bell" style="color:#fff;font-size:12px;"></i>
+            </div>
+            <div>
+                <div style="font-size:10px;font-weight:800;color:#92400e;text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px;">
+                    Finance Office · <?php echo date('d M Y', strtotime($rem['created_at'])); ?>
+                </div>
+                <div style="font-size:12px;color:#78350f;white-space:pre-line;line-height:1.6;"><?php echo htmlspecialchars($rem['message']); ?></div>
+            </div>
+        </div>
+        <?php endforeach; ?>
+
+        <!-- ── CLEARED banner (show only when fully paid) ───── -->
+        <?php if ($total_fees_assigned > 0 && $total_fee_balance <= 0): ?>
+        <div class="fp-cleared">
+            <div class="fp-cleared-icon">
+                <i class="fa-solid fa-check" style="color:#fff;font-size:26px;"></i>
+            </div>
+            <div class="fp-cleared-title">All Fees Cleared!</div>
+            <div class="fp-cleared-sub">Your account is fully settled for this period. Great work!</div>
+            <div class="fp-cleared-stamp">
+                <i class="fa-solid fa-shield-check"></i> CLEARED — KES <?php echo number_format($total_fees_paid,0); ?> paid
+            </div>
+        </div>
+        <?php endif; ?>
+
+        <!-- ── KPI cards ────────────────────────────────────── -->
+        <div class="fp-kpi-grid">
+            <!-- Total Fees -->
+            <div class="fp-kpi">
+                <div class="bar" style="background:#0f172a;"></div>
+                <div class="fp-kpi-label">Total Fees</div>
+                <div class="fp-kpi-val" style="color:#0f172a;">KES <?php echo number_format($total_fees_assigned,0); ?></div>
+                <div class="fp-kpi-sub" style="color:#94a3b8;"><?php echo count($fee_assignments); ?> fee<?php echo count($fee_assignments)!=1?'s':''; ?> assigned</div>
+            </div>
+            <!-- Paid -->
+            <div class="fp-kpi">
+                <div class="bar" style="background:#10b981;"></div>
+                <div class="fp-kpi-label">Amount Paid</div>
+                <div class="fp-kpi-val" style="color:#10b981;">KES <?php echo number_format($total_fees_paid,0); ?></div>
+                <div class="fp-prog"><div class="fp-prog-fill" style="width:<?php echo $fee_collection_pct; ?>%;background:#10b981;"></div></div>
+                <div class="fp-kpi-sub" style="color:#94a3b8;"><?php echo $fee_collection_pct; ?>% of total</div>
+            </div>
+            <!-- Balance -->
+            <?php
+            $bal_color = $total_fee_balance <= 0 ? '#10b981' : ($has_overdue_fees ? '#ef4444' : '#f59e0b');
+            $bal_text  = $total_fee_balance <= 0 ? '✓ Cleared' : 'KES '.number_format($total_fee_balance,0);
+            $bal_sub   = $total_fee_balance <= 0 ? 'All fees paid!' : ($has_overdue_fees ? '⚠ Overdue — visit Finance' : 'Balance remaining');
+            ?>
+            <div class="fp-kpi">
+                <div class="bar" style="background:<?php echo $bal_color; ?>;"></div>
+                <div class="fp-kpi-label">Balance</div>
+                <div class="fp-kpi-val" style="color:<?php echo $bal_color; ?>;"><?php echo $bal_text; ?></div>
+                <div class="fp-kpi-sub" style="color:<?php echo $bal_color; ?>;"><?php echo $bal_sub; ?></div>
+            </div>
+            <!-- Transactions -->
+            <div class="fp-kpi">
+                <div class="bar" style="background:#3b82f6;"></div>
+                <div class="fp-kpi-label">Transactions</div>
+                <div class="fp-kpi-val" style="color:#3b82f6;"><?php echo count($fee_payments_history); ?></div>
+                <div class="fp-kpi-sub" style="color:#94a3b8;">payments recorded</div>
+            </div>
+        </div>
+
+        <!-- ── Fee Schedule ──────────────────────────────────── -->
+        <div class="fp-card">
+            <div class="fp-card-head">
+                <div class="fp-card-icon" style="background:#d1fae5;">
+                    <i class="fa-solid fa-file-invoice-dollar" style="color:#10b981;font-size:14px;"></i>
+                </div>
+                <div>
+                    <div class="fp-card-title">Fee Schedule</div>
+                    <div class="fp-card-sub">All fees assigned to your account</div>
+                </div>
+            </div>
+
+            <?php if (empty($fee_assignments)): ?>
+            <div style="text-align:center;padding:40px 20px;">
+                <i class="fa-solid fa-circle-check" style="font-size:36px;color:#10b981;display:block;margin-bottom:12px;opacity:.5;"></i>
+                <div style="font-weight:700;color:#0f172a;font-size:14px;">No fees assigned yet</div>
+                <div style="font-size:12px;color:#94a3b8;margin-top:4px;">The Finance Office hasn't assigned any fees to your account yet.</div>
+            </div>
+            <?php else: ?>
+
+            <?php
+            $cat_col = [
+                'tuition'=>['#dbeafe','#1e40af'],'examination'=>['#fce7f3','#831843'],
+                'library'=>['#d1fae5','#065f46'],'accommodation'=>['#ede9fe','#4c1d95'],
+                'transport'=>['#fef3c7','#92400e'],'medical'=>['#fee2e2','#991b1b'],
+                'activity'=>['#e0f2fe','#075985'],'other'=>['#f3f4f6','#374151'],
+            ];
+            ?>
+
+            <!-- DESKTOP table -->
+            <div class="fp-tbl-wrap">
+            <table class="fp-tbl">
+                <thead>
+                    <tr>
+                        <th>Fee</th><th>Category</th><th>Period</th>
+                        <th>Due Date</th><th>Total</th><th>Paid</th><th>Balance</th><th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                <?php foreach ($fee_assignments as $fa):
+                    $fa_bal  = floatval($fa['balance']);
+                    $fa_paid = floatval($fa['amount_paid']);
+                    $fa_net  = floatval($fa['net_amount']);
+                    $fa_pct  = $fa_net > 0 ? round(($fa_paid/$fa_net)*100) : 0;
+                    [$cbg,$cfg] = $cat_col[$fa['fee_category']] ?? ['#f3f4f6','#374151'];
+                    $is_overdue = !empty($fa['due_date']) && strtotime($fa['due_date']) < time() && $fa_bal > 0;
+                    // Determine display status
+                    if ($fa_bal <= 0)           { $disp_status='cleared'; $disp_label='✓ Cleared'; }
+                    elseif ($fa['status']==='waived')  { $disp_status='waived';  $disp_label='Waived'; }
+                    elseif ($is_overdue)                { $disp_status='overdue'; $disp_label='Overdue'; }
+                    elseif ($fa_paid > 0)               { $disp_status='partial'; $disp_label='Partial'; }
+                    else                                { $disp_status='pending'; $disp_label='Pending'; }
+                ?>
+                <tr>
+                    <td>
+                        <div style="font-weight:700;font-size:13px;color:#0f172a;"><?php echo htmlspecialchars($fa['fee_name']); ?></div>
+                        <?php if (floatval($fa['discount_amount']) > 0): ?>
+                        <div style="font-size:10px;color:#10b981;margin-top:2px;">
+                            <i class="fa-solid fa-tag"></i> Discount: KES <?php echo number_format($fa['discount_amount'],0); ?>
+                        </div>
+                        <?php endif; ?>
+                    </td>
+                    <td><span class="fp-badge" style="background:<?php echo $cbg;?>;color:<?php echo $cfg;?>;"><?php echo ucfirst($fa['fee_category']); ?></span></td>
+                    <td style="font-size:12px;color:#64748b;white-space:nowrap;"><?php echo htmlspecialchars($fa['semester']); ?><br><span style="opacity:.6;"><?php echo htmlspecialchars($fa['academic_year']); ?></span></td>
+                    <td style="font-size:12px;color:<?php echo $is_overdue?'#ef4444':'#64748b'; ?>;white-space:nowrap;">
+                        <?php echo $fa['due_date'] ? date('d M Y', strtotime($fa['due_date'])) : '—'; ?>
+                        <?php if ($is_overdue): ?><div style="background:#fee2e2;color:#991b1b;font-size:9px;font-weight:800;padding:1px 5px;border-radius:4px;display:inline-block;margin-top:2px;">OVERDUE</div><?php endif; ?>
+                    </td>
+                    <td class="fp-mono" style="white-space:nowrap;">KES <?php echo number_format($fa_net,0); ?></td>
+                    <td>
+                        <div class="fp-mono" style="color:#10b981;font-weight:700;white-space:nowrap;">KES <?php echo number_format($fa_paid,0); ?></div>
+                        <div class="fp-prog" style="width:64px;"><div class="fp-prog-fill" style="width:<?php echo $fa_pct; ?>%;background:#10b981;"></div></div>
+                    </td>
+                    <td class="fp-mono" style="font-weight:700;color:<?php echo $fa_bal<=0?'#10b981':($is_overdue?'#ef4444':'#f59e0b'); ?>;white-space:nowrap;">
+                        <?php echo $fa_bal <= 0 ? '✓ 0' : 'KES '.number_format($fa_bal,0); ?>
+                    </td>
+                    <td>
+                        <span class="fp-badge fp-badge-<?php echo $disp_status; ?>">
+                            <?php if ($disp_status==='cleared'): ?><i class="fa-solid fa-shield-check"></i><?php endif; ?>
+                            <?php echo $disp_label; ?>
+                        </span>
+                    </td>
+                </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+            </div>
+
+            <!-- MOBILE cards -->
+            <div class="fp-mob-list">
+                <?php foreach ($fee_assignments as $fa):
+                    $fa_bal  = floatval($fa['balance']);
+                    $fa_paid = floatval($fa['amount_paid']);
+                    $fa_net  = floatval($fa['net_amount']);
+                    $fa_pct  = $fa_net > 0 ? round(($fa_paid/$fa_net)*100) : 0;
+                    [$cbg,$cfg] = $cat_col[$fa['fee_category']] ?? ['#f3f4f6','#374151'];
+                    $is_overdue = !empty($fa['due_date']) && strtotime($fa['due_date']) < time() && $fa_bal > 0;
+                    if ($fa_bal <= 0)          { $disp_status='cleared'; $disp_label='✓ Cleared'; }
+                    elseif ($fa['status']==='waived') { $disp_status='waived'; $disp_label='Waived'; }
+                    elseif ($is_overdue)               { $disp_status='overdue'; $disp_label='⚠ Overdue'; }
+                    elseif ($fa_paid > 0)              { $disp_status='partial'; $disp_label='Partial'; }
+                    else                               { $disp_status='pending'; $disp_label='Pending'; }
+                    $border = $fa_bal<=0?'#6ee7b7':($is_overdue?'#fca5a5':'#e2e8f0');
+                ?>
+                <div class="fp-mob-item" style="border-color:<?php echo $border; ?>;">
+                    <div class="fp-mob-top">
+                        <div>
+                            <div class="fp-mob-name"><?php echo htmlspecialchars($fa['fee_name']); ?></div>
+                            <span class="fp-badge" style="margin-top:5px;background:<?php echo $cbg;?>;color:<?php echo $cfg;?>;"><?php echo ucfirst($fa['fee_category']); ?></span>
+                        </div>
+                        <span class="fp-badge fp-badge-<?php echo $disp_status; ?>"><?php echo $disp_label; ?></span>
+                    </div>
+                    <div class="fp-mob-row"><span class="fp-mob-key">Period</span><span class="fp-mob-val"><?php echo $fa['semester'].' · '.$fa['academic_year']; ?></span></div>
+                    <div class="fp-mob-row"><span class="fp-mob-key">Total</span><span class="fp-mob-val fp-mono">KES <?php echo number_format($fa_net,0); ?></span></div>
+                    <div class="fp-mob-row"><span class="fp-mob-key">Paid</span><span class="fp-mob-val fp-mono" style="color:#10b981;">KES <?php echo number_format($fa_paid,0); ?></span></div>
+                    <div class="fp-mob-row">
+                        <span class="fp-mob-key">Balance</span>
+                        <span class="fp-mob-val fp-mono" style="color:<?php echo $fa_bal<=0?'#10b981':($is_overdue?'#ef4444':'#f59e0b'); ?>;">
+                            <?php echo $fa_bal <= 0 ? '✓ Cleared' : 'KES '.number_format($fa_bal,0); ?>
+                        </span>
+                    </div>
+                    <?php if ($fa['due_date']): ?>
+                    <div class="fp-mob-row">
+                        <span class="fp-mob-key">Due</span>
+                        <span class="fp-mob-val" style="color:<?php echo $is_overdue?'#ef4444':'#64748b'; ?>;">
+                            <?php echo date('d M Y', strtotime($fa['due_date'])); ?>
+                            <?php if ($is_overdue): ?> <span style="background:#fee2e2;color:#991b1b;font-size:9px;font-weight:800;padding:1px 5px;border-radius:4px;">OVERDUE</span><?php endif; ?>
+                        </span>
+                    </div>
+                    <?php endif; ?>
+                    <div style="margin-top:10px;">
+                        <div class="fp-prog"><div class="fp-prog-fill" style="width:<?php echo $fa_pct; ?>%;background:#10b981;"></div></div>
+                        <div style="font-size:10px;color:#94a3b8;margin-top:3px;"><?php echo $fa_pct; ?>% paid</div>
+                    </div>
+                </div>
+                <?php endforeach; ?>
+            </div>
+
+            <?php endif; ?>
+        </div>
+
+        <!-- ── Payment History ───────────────────────────────── -->
+        <div class="fp-card">
+            <div class="fp-card-head">
+                <div class="fp-card-icon" style="background:#dbeafe;">
+                    <i class="fa-solid fa-receipt" style="color:#3b82f6;font-size:14px;"></i>
+                </div>
+                <div>
+                    <div class="fp-card-title">Payment History</div>
+                    <div class="fp-card-sub"><?php echo count($fee_payments_history); ?> transaction<?php echo count($fee_payments_history)!=1?'s':''; ?> recorded</div>
+                </div>
+            </div>
+
+            <?php if (empty($fee_payments_history)): ?>
+            <div style="text-align:center;padding:32px;color:#94a3b8;font-size:13px;">
+                <i class="fa-solid fa-receipt" style="font-size:28px;opacity:.25;display:block;margin-bottom:10px;"></i>
+                No payments recorded yet.
+            </div>
+            <?php else: ?>
+
+            <?php
+            $meth_meta = ['cash'=>['fa-money-bill-wave','#10b981'],'mpesa'=>['fa-mobile-screen','#22c55e'],
+                'bank_transfer'=>['fa-building-columns','#3b82f6'],'cheque'=>['fa-file-lines','#8b5cf6'],
+                'online'=>['fa-globe','#06b6d4'],'scholarship'=>['fa-graduation-cap','#f59e0b']];
+            ?>
+
+            <!-- DESKTOP payment table -->
+            <div class="fp-tbl-wrap fp-pay-tbl">
+            <table class="fp-tbl">
+                <thead>
+                    <tr><th>Receipt</th><th>Fee</th><th>Amount</th><th>Method</th><th>Reference</th><th>Date</th><th>By</th></tr>
+                </thead>
+                <tbody>
+                <?php foreach ($fee_payments_history as $ph):
+                    [$mic,$mcol] = $meth_meta[$ph['payment_method']] ?? ['fa-circle','#94a3b8'];
+                ?>
+                <tr>
+                    <td><span style="background:#f1f5f9;padding:3px 8px;border-radius:6px;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;"><?php echo htmlspecialchars($ph['receipt_number']); ?></span></td>
+                    <td style="font-size:12px;color:#64748b;"><?php echo htmlspecialchars($ph['fee_name']); ?></td>
+                    <td class="fp-mono" style="color:#10b981;font-weight:700;white-space:nowrap;">KES <?php echo number_format($ph['amount_paid'],0); ?></td>
+                    <td><span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;color:<?php echo $mcol; ?>;"><i class="fa-solid <?php echo $mic; ?>"></i><?php echo ucfirst(str_replace('_',' ',$ph['payment_method'])); ?></span></td>
+                    <td class="fp-mono" style="font-size:11px;color:#94a3b8;"><?php echo htmlspecialchars($ph['transaction_ref']?:'—'); ?></td>
+                    <td style="font-size:12px;color:#64748b;white-space:nowrap;"><?php echo date('d M Y',strtotime($ph['payment_date'])); ?></td>
+                    <td style="font-size:12px;color:#94a3b8;"><?php echo htmlspecialchars($ph['recorded_by_name']); ?></td>
+                </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+            </div>
+
+            <!-- MOBILE payment cards -->
+            <div class="fp-pay-mob-list">
+                <?php foreach ($fee_payments_history as $ph):
+                    [$mic,$mcol] = $meth_meta[$ph['payment_method']] ?? ['fa-circle','#94a3b8'];
+                ?>
+                <div class="fp-pay-mob-item">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                        <span style="background:#f1f5f9;padding:4px 10px;border-radius:6px;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;"><?php echo htmlspecialchars($ph['receipt_number']); ?></span>
+                        <span class="fp-mono" style="color:#10b981;font-weight:800;font-size:14px;">KES <?php echo number_format($ph['amount_paid'],0); ?></span>
+                    </div>
+                    <div style="font-size:12px;color:#64748b;margin-bottom:8px;"><?php echo htmlspecialchars($ph['fee_name']); ?></div>
+                    <div style="display:flex;justify-content:space-between;font-size:12px;">
+                        <span style="display:inline-flex;align-items:center;gap:5px;font-weight:600;color:<?php echo $mcol; ?>;"><i class="fa-solid <?php echo $mic; ?>"></i><?php echo ucfirst(str_replace('_',' ',$ph['payment_method'])); ?></span>
+                        <span style="color:#94a3b8;"><?php echo date('d M Y',strtotime($ph['payment_date'])); ?></span>
+                    </div>
+                    <?php if ($ph['transaction_ref']): ?>
+                    <div style="font-size:10px;color:#94a3b8;font-family:'JetBrains Mono',monospace;margin-top:5px;">Ref: <?php echo htmlspecialchars($ph['transaction_ref']); ?></div>
+                    <?php endif; ?>
+                </div>
+                <?php endforeach; ?>
+            </div>
+
+            <?php endif; ?>
+        </div>
+
+    </div><!-- /.fp-wrap -->
+    </div>
+    <!-- END FEES SECTION -->
+
+
+    
+        <div id="chatbot-container">
         <div id="chatbot-window">
             <div id="chatbot-header">
                 <div class="flex items-center space-x-2">
@@ -1444,6 +2051,7 @@ $barred_count = count(array_filter($student_attendance, fn($a) => $a['barred']))
             if (viewId === 'my-units') document.getElementById('nav-my-units').classList.add('sidebar-active');
             if (viewId === 'my-results') document.getElementById('nav-my-results').classList.add('sidebar-active');
             if (viewId === 'my-attendance') document.getElementById('nav-my-attendance').classList.add('sidebar-active');
+            if (viewId === 'my-fees') { const n = document.getElementById('nav-my-fees'); if(n) n.classList.add('sidebar-active'); }
             
             document.getElementById('page-title').innerText = viewId.replace('-', ' ').toUpperCase();
         }
