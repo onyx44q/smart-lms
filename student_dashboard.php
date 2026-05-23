@@ -201,7 +201,7 @@ mysqli_query($conn, "CREATE TABLE IF NOT EXISTS `attendance_records` (
 $student_attendance = [];
 $att_res = mysqli_query($conn,
     "SELECT cu.id AS unit_id, cu.title AS unit_title, cu.unit_code,
-            c.title AS course_title,
+            c.id AS course_id, c.title AS course_title,
             COUNT(DISTINCT ats.id)                                                        AS total_sessions,
             SUM(CASE WHEN ar.status='present' THEN 1 ELSE 0 END)                          AS attended,
             SUM(CASE WHEN ar.status='absent'  THEN 1 ELSE 0 END)                          AS absences,
@@ -213,7 +213,7 @@ $att_res = mysqli_query($conn,
      LEFT JOIN attendance_sessions ats ON ats.unit_id = cu.id
      LEFT JOIN attendance_records  ar  ON ar.session_id = ats.id AND ar.student_id = $user_id
      WHERE ur.student_id = $user_id
-     GROUP BY cu.id, cu.title, cu.unit_code, c.title
+     GROUP BY cu.id, cu.title, cu.unit_code, c.id, c.title
      ORDER BY c.title, cu.title"
 );
 if ($att_res) {
@@ -367,6 +367,11 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
         .dropdown-active .dropdown-content { max-height: 200px; }
         @keyframes slide-in { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
         .animate-slide-in { animation: slide-in 0.4s ease-out forwards; }
+
+        /* ── Unified Course Filter Tabs ── */
+        .att-course-tab { display:inline-flex; align-items:center; gap:7px; padding:8px 16px; border-radius:10px; font-size:12px; font-weight:700; cursor:pointer; border:1.5px solid #e2e8f0; background:#fff; color:#64748b; transition:all .2s; white-space:nowrap; }
+        .att-course-tab:hover { border-color:#3b82f6; color:#3b82f6; background:#eff6ff; }
+        .att-course-tab.active { background:#3b82f6; color:#fff; border-color:#3b82f6; box-shadow:0 4px 12px rgba(59,130,246,.3); }
 
         /* ── AI Panel ── */
         .ai-panel {
@@ -544,7 +549,6 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
         </header>
 
         <?php if ($enrolledCount > 1): ?>
-        <!-- ── Course Tab Switcher ───────────────────────────────────── -->
         <div class="flex items-center space-x-2 mb-8 overflow-x-auto pb-1">
             <span class="text-[9px] font-black uppercase text-slate-400 tracking-widest flex-shrink-0 mr-2">
                 <i class="fa-solid fa-filter mr-1"></i>Viewing:
@@ -564,7 +568,6 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
             <?php endwhile; ?>
         </div>
         <?php else: ?>
-        <!-- Single course: show the course name as a heading badge -->
         <?php if ($view_course_name): ?>
         <div class="mb-6">
             <span class="inline-flex items-center px-4 py-2 bg-blue-50 border border-blue-200 rounded-xl text-[10px] font-black uppercase text-blue-700 tracking-widest">
@@ -638,7 +641,6 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
                 </div>
             </div>
             <?php else: ?>
-            <!-- No quiz activity for this course yet -->
             <div class="dashboard-card p-6 rounded-2xl mb-8 border-dashed border-2 border-slate-200 bg-slate-50 text-center">
                 <i class="fa-solid fa-chart-simple text-slate-300 text-3xl mb-3"></i>
                 <p class="text-slate-500 font-bold text-sm">No quiz activity yet for <span class="text-blue-600"><?php echo htmlspecialchars($view_course_name); ?></span></p>
@@ -869,7 +871,7 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
             </div>
         </div>
 
-        <div id="view-schedule" class="view-section">
+        <div id="view-schedule" class="view-section p-4 lg:p-8">
             <div class="flex items-center justify-between mb-8">
                 <div>
                     <h2 class="text-2xl font-black text-slate-900 uppercase italic">Class Schedule</h2>
@@ -878,7 +880,7 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
             </div>
 
             <?php 
-            if (!empty($enrolled_ids)) {
+            if (!empty($enrolled_ids)) { 
                 $ids_str = implode(',', $enrolled_ids);
                 $sch_res = mysqli_query($conn, 
                     "SELECT s.*, c.title as course_title, u.full_name as lecturer_name 
@@ -889,42 +891,73 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
                      ORDER BY s.meet_date ASC, s.meet_time ASC"
                 );
                 
-                if ($sch_res && mysqli_num_rows($sch_res) > 0): ?>
-                    <div class="space-y-4">
-                        <?php while($s = mysqli_fetch_assoc($sch_res)): 
-                            $date = new DateTime($s['meet_date']);
-                        ?>
-                        <div class="dashboard-card p-5 rounded-2xl flex items-center justify-between">
-                            <div class="flex items-center space-x-5">
-                                <div class="w-14 h-14 bg-blue-50 rounded-2xl flex flex-col items-center justify-center text-blue-600">
-                                    <span class="text-lg font-black leading-none"><?php echo $date->format('d'); ?></span>
-                                    <span class="text-[9px] font-black uppercase"><?php echo $date->format('M'); ?></span>
-                                </div>
-                                <div>
-                                    <h4 class="font-black text-slate-900 text-sm mb-1"><?php echo htmlspecialchars($s['title']); ?></h4>
-                                    <p class="text-slate-400 text-[10px] uppercase font-bold">
-                                        <i class="fa-solid fa-clock mr-1 text-blue-500"></i> <?php echo date('h:i A', strtotime($s['meet_time'])); ?>
-                                        &nbsp;·&nbsp; <i class="fa-solid fa-user-tie mr-1 text-blue-500"></i> <?php echo htmlspecialchars($s['lecturer_name']); ?>
-                                    </p>
-                                    <p class="text-blue-600 text-[9px] font-black uppercase mt-1"><?php echo htmlspecialchars($s['course_title']); ?></p>
-                                </div>
+                $schedules = [];
+                if ($sch_res) {
+                    while($s = mysqli_fetch_assoc($sch_res)) {
+                        $schedules[] = $s;
+                    }
+                }
+                
+                // Group by course title
+                $sch_by_course = [];
+                foreach ($schedules as $s) {
+                    $ct = $s['course_title'] ?? 'General';
+                    if (!isset($sch_by_course[$ct])) $sch_by_course[$ct] = [];
+                    $sch_by_course[$ct][] = $s;
+                }
+                $sch_course_keys = array_keys($sch_by_course);
+            ?>
+
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;overflow-x:auto;padding-bottom:4px;">
+                <button class="att-course-tab sch-tab active" onclick="filterSchCourse('all', this)">
+                    <i class="fa-solid fa-layer-group"></i> All Courses
+                    <span style="background:rgba(255,255,255,.25);padding:1px 7px;border-radius:10px;font-size:10px;"><?php echo count($schedules); ?></span>
+                </button>
+                <?php foreach ($sch_course_keys as $ci => $cname): ?>
+                <button class="att-course-tab sch-tab" onclick="filterSchCourse('course-<?php echo $ci; ?>', this)">
+                    <i class="fa-solid fa-book-open"></i> <?php echo htmlspecialchars($cname); ?>
+                    <span style="background:#e2e8f0;color:#475569;padding:1px 7px;border-radius:10px;font-size:10px;"><?php echo count($sch_by_course[$cname]); ?></span>
+                </button>
+                <?php endforeach; ?>
+            </div>
+
+            <?php if (!empty($schedules)): ?>
+                <div class="space-y-4" id="sch-cards-container">
+                    <?php foreach($schedules as $s): 
+                        $date = new DateTime($s['meet_date']);
+                        $ci_key = array_search($s['course_title'] ?? 'General', $sch_course_keys);
+                    ?>
+                    <div class="dashboard-card p-5 rounded-2xl flex items-center justify-between sch-card" data-course="course-<?php echo $ci_key; ?>">
+                        <div class="flex items-center space-x-5">
+                            <div class="w-14 h-14 bg-blue-50 rounded-2xl flex flex-col items-center justify-center text-blue-600">
+                                <span class="text-lg font-black leading-none"><?php echo $date->format('d'); ?></span>
+                                <span class="text-[9px] font-black uppercase"><?php echo $date->format('M'); ?></span>
                             </div>
-                            <?php if (!empty($s['meet_link'])): ?>
-                                <a href="<?php echo htmlspecialchars($s['meet_link']); ?>" target="_blank"
-                                   class="flex items-center space-x-2 px-5 py-2.5 <?php echo !empty($s['zoom_meeting_id']) ? 'bg-blue-600 shadow-blue-100' : 'bg-indigo-600 shadow-indigo-100'; ?> text-white text-[10px] font-black uppercase rounded-xl shadow-lg hover:scale-105 transition-all">
-                                    <i class="fa-solid fa-video text-xs"></i>
-                                    <span><?php echo !empty($s['zoom_meeting_id']) ? 'Join Zoom' : 'Join Class'; ?></span>
-                                </a>
-                            <?php endif; ?>
+                            <div>
+                                <h4 class="font-black text-slate-900 text-sm mb-1"><?php echo htmlspecialchars($s['title']); ?></h4>
+                                <p class="text-slate-400 text-[10px] uppercase font-bold">
+                                    <i class="fa-solid fa-clock mr-1 text-blue-500"></i> <?php echo date('h:i A', strtotime($s['meet_time'])); ?>
+                                    &nbsp;·&nbsp; <i class="fa-solid fa-user-tie mr-1 text-blue-500"></i> <?php echo htmlspecialchars($s['lecturer_name']); ?>
+                                </p>
+                                <p class="text-blue-600 text-[9px] font-black uppercase mt-1"><?php echo htmlspecialchars($s['course_title']); ?></p>
+                            </div>
                         </div>
-                        <?php endwhile; ?>
+                        <?php if (!empty($s['meet_link'])): ?>
+                            <a href="<?php echo htmlspecialchars($s['meet_link']); ?>" target="_blank"
+                               class="flex items-center space-x-2 px-5 py-2.5 <?php echo !empty($s['zoom_meeting_id']) ? 'bg-blue-600 shadow-blue-100' : 'bg-indigo-600 shadow-indigo-100'; ?> text-white text-[10px] font-black uppercase rounded-xl shadow-lg hover:scale-105 transition-all">
+                                <i class="fa-solid fa-video text-xs"></i>
+                                <span><?php echo !empty($s['zoom_meeting_id']) ? 'Join Zoom' : 'Join Class'; ?></span>
+                            </a>
+                        <?php endif; ?>
                     </div>
-                <?php else: ?>
-                    <div class="bg-white rounded-3xl border border-slate-100 p-12 text-center">
-                        <i class="fa-solid fa-calendar-xmark text-slate-200 text-4xl mb-4"></i>
-                        <p class="text-slate-500 text-sm font-bold uppercase">No upcoming sessions scheduled.</p>
-                    </div>
-                <?php endif; 
+                    <?php endforeach; ?>
+                </div>
+            <?php else: ?>
+                <div class="bg-white rounded-3xl border border-slate-100 p-12 text-center">
+                    <i class="fa-solid fa-calendar-xmark text-slate-200 text-4xl mb-4"></i>
+                    <p class="text-slate-500 text-sm font-bold uppercase">No upcoming sessions scheduled.</p>
+                </div>
+            <?php endif; 
             } else { ?>
                 <div class="bg-white rounded-3xl border border-slate-100 p-12 text-center">
                     <p class="text-slate-500 text-sm font-bold uppercase">Enroll in a course to see its schedule.</p>
@@ -1034,22 +1067,18 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
             <?php endif; ?>
         </div>
 
-        <!-- ═══════════════════ UNIT MATERIALS VIEW ═══════════════════ -->
         <div id="view-details" class="view-section">
-            <!-- Back button -->
             <button onclick="switchView('my-units')"
                 class="mb-5 flex items-center gap-2 text-[10px] font-black uppercase text-indigo-600 hover:text-indigo-800 transition-all">
                 <i class="fa-solid fa-arrow-left"></i> Back to My Units
             </button>
 
-            <!-- Unit header banner (populated by JS) -->
             <div class="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-[1.75rem] px-6 py-5 mb-6 shadow-lg shadow-indigo-100">
                 <p id="det-course" class="text-indigo-200 text-[9px] font-black uppercase tracking-widest mb-0.5"></p>
                 <h2 id="det-title" class="text-white font-extrabold text-xl">Unit Materials</h2>
                 <p id="det-code" class="text-indigo-200 text-xs mt-0.5"></p>
             </div>
 
-            <!-- Filter tabs (shown when > 1 type exists) -->
             <div id="det-filters" class="hidden flex-wrap gap-2 mb-5">
                 <button class="det-ftab px-4 py-2 rounded-xl text-[9px] font-black uppercase border transition-all bg-slate-900 text-white border-slate-900" data-filter="all">All</button>
                 <button class="det-ftab px-4 py-2 rounded-xl text-[9px] font-black uppercase border transition-all bg-white text-slate-600 border-slate-200" data-filter="pdf">
@@ -1063,23 +1092,15 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
                 </button>
             </div>
 
-            <!-- Materials rendered here by JS -->
             <div id="materials-list" class="space-y-3"></div>
         </div>
-        <!-- ═══════════════════ END UNIT MATERIALS VIEW ══════════════════ -->
-
-        <!-- ═══════════════════════════════════════════════════════════
-             MY UNITS — register/deregister units per enrolled course
-        ═══════════════════════════════════════════════════════════ -->
-        <div id="view-my-units" class="view-section">
+        <div id="view-my-units" class="view-section p-4 lg:p-8">
             <?php
             // ── ensure unit tables ────────────────────────────────
             foreach ([
                 "CREATE TABLE IF NOT EXISTS `course_units` (`id` INT AUTO_INCREMENT PRIMARY KEY, `course_id` INT NOT NULL, `title` VARCHAR(255) NOT NULL, `unit_code` VARCHAR(50) DEFAULT NULL, `description` TEXT DEFAULT NULL, `lecturer_id` INT DEFAULT NULL, `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP, KEY(`course_id`)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
                 "CREATE TABLE IF NOT EXISTS `unit_registrations` (`id` INT AUTO_INCREMENT PRIMARY KEY, `student_id` INT NOT NULL, `unit_id` INT NOT NULL, `registered_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP, UNIQUE KEY(`student_id`,`unit_id`)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
             ] as $tsql_u) mysqli_query($conn, $tsql_u);
-            // active_course_id is set by JS via hidden input
-            $active_course_id_filter = 0; // JS controls display; PHP fetches all
 
             // Get all enrolled courses + available units + my registrations
             $enrolled_courses_res = mysqli_query($conn,
@@ -1097,6 +1118,13 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
             );
             $my_unit_ids = [];
             while ($muid = mysqli_fetch_assoc($my_unit_ids_res)) $my_unit_ids[] = intval($muid['unit_id']);
+
+            // Group courses to emulate attendance tabs
+            $units_by_course = [];
+            foreach ($enrolled_courses_for_units as $ec) {
+                $units_by_course[$ec['title']] = $ec;
+            }
+            $units_course_keys = array_keys($units_by_course);
             ?>
 
             <div class="mb-6 flex items-center justify-between flex-wrap gap-3">
@@ -1104,10 +1132,20 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
                     <h2 class="text-2xl font-black text-slate-900" id="units-page-title">My Units</h2>
                     <p class="text-slate-500 text-sm mt-1" id="units-page-sub">Register for the units you want to take within each enrolled course.</p>
                 </div>
-                <button onclick="showAllCourseUnits()" id="units-show-all-btn"
-                    class="hidden px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 font-black text-[9px] uppercase rounded-xl tracking-widest transition-all">
-                    <i class="fa-solid fa-list mr-1"></i>Show All Courses
+            </div>
+
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;overflow-x:auto;padding-bottom:4px;">
+                <button class="att-course-tab unit-tab active" onclick="filterUnitCourse('all', this)">
+                    <i class="fa-solid fa-layer-group"></i> All Courses
+                    <span style="background:rgba(255,255,255,.25);padding:1px 7px;border-radius:10px;font-size:10px;"><?php echo count($enrolled_courses_for_units); ?></span>
                 </button>
+                <?php foreach ($units_course_keys as $ci => $cname): 
+                    $c_id = $units_by_course[$cname]['id'];
+                ?>
+                <button class="att-course-tab unit-tab" data-original-id="<?php echo $c_id; ?>" onclick="filterUnitCourse('course-<?php echo $ci; ?>', this)">
+                    <i class="fa-solid fa-book-open"></i> <?php echo htmlspecialchars($cname); ?>
+                </button>
+                <?php endforeach; ?>
             </div>
 
             <?php if (empty($enrolled_courses_for_units)): ?>
@@ -1120,8 +1158,9 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
                 </button>
             </div>
             <?php else: ?>
-            <div class="space-y-8" id="units-list-container">
+            <div class="space-y-8" id="units-cards-container">
             <?php foreach ($enrolled_courses_for_units as $ec):
+                $ci_key = array_search($ec['title'], $units_course_keys);
                 $avail_units = [];
                 $ur = mysqli_query($conn,
                     "SELECT cu.id, cu.title, cu.unit_code, cu.description, u.full_name AS lecturer_name,
@@ -1133,7 +1172,7 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
                 );
                 while ($av = mysqli_fetch_assoc($ur)) $avail_units[] = $av;
             ?>
-            <div class="bg-white rounded-[2rem] border border-slate-100 overflow-hidden shadow-sm course-unit-block" data-course-id="<?php echo $ec['id']; ?>">
+            <div class="bg-white rounded-[2rem] border border-slate-100 overflow-hidden shadow-sm unit-card" data-course="course-<?php echo $ci_key; ?>">
                 <div class="px-7 py-5 bg-gradient-to-r from-slate-50 to-blue-50/30 border-b border-slate-100 flex items-center justify-between">
                     <div>
                         <h3 class="font-black text-slate-900"><?php echo htmlspecialchars($ec['title']); ?></h3>
@@ -1221,12 +1260,7 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
             </div>
             <?php endif; ?>
         </div>
-        <!-- END MY UNITS -->
-
-        <!-- ═══════════════════════════════════════════════════════════
-             MY RESULTS — per unit, per assessment component breakdown
-        ═══════════════════════════════════════════════════════════ -->
-        <div id="view-my-results" class="view-section">
+        <div id="view-my-results" class="view-section p-4 lg:p-8">
             <?php
             // ── Ensure tables ─────────────────────────────────────
             foreach ([
@@ -1239,7 +1273,7 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
             // Fetch all units this student is registered for
             $my_results_res = mysqli_query($conn,
                 "SELECT cu.id AS unit_id, cu.title AS unit_title, cu.unit_code,
-                        c.title AS course_title,
+                        c.id AS course_id, c.title AS course_title,
                         lect.full_name AS lecturer_name
                  FROM unit_registrations ur
                  JOIN course_units cu ON cu.id = ur.unit_id
@@ -1282,6 +1316,15 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
                 ]);
             }
 
+            // Group results to emulate attendance tabs
+            $res_by_course = [];
+            foreach ($units_with_marks as $uwm) {
+                $ct = $uwm['course_title'] ?? 'General';
+                if (!isset($res_by_course[$ct])) $res_by_course[$ct] = [];
+                $res_by_course[$ct][] = $uwm;
+            }
+            $res_course_keys = array_keys($res_by_course);
+
             $grade_fn_s = function($pct) {
                 if ($pct >= 70) return ['A', 'bg-emerald-100 text-emerald-700 border-emerald-200'];
                 if ($pct >= 60) return ['B', 'bg-blue-100 text-blue-700 border-blue-200'];
@@ -1301,8 +1344,20 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
                 <p class="text-slate-500 text-sm mt-1">Unit-by-unit breakdown with all assessment components.</p>
             </div>
 
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;overflow-x:auto;padding-bottom:4px;">
+                <button class="att-course-tab res-tab active" onclick="filterResCourse('all', this)">
+                    <i class="fa-solid fa-layer-group"></i> All Courses
+                    <span style="background:rgba(255,255,255,.25);padding:1px 7px;border-radius:10px;font-size:10px;"><?php echo count($units_with_marks); ?></span>
+                </button>
+                <?php foreach ($res_course_keys as $ci => $cname): ?>
+                <button class="att-course-tab res-tab" onclick="filterResCourse('course-<?php echo $ci; ?>', this)">
+                    <i class="fa-solid fa-book-open"></i> <?php echo htmlspecialchars($cname); ?>
+                    <span style="background:#e2e8f0;color:#475569;padding:1px 7px;border-radius:10px;font-size:10px;"><?php echo count($res_by_course[$cname]); ?></span>
+                </button>
+                <?php endforeach; ?>
+            </div>
+
             <?php if (!empty($graded_units2)): ?>
-            <!-- Summary banner -->
             <div class="grid grid-cols-3 gap-4 mb-8">
                 <div class="bg-white rounded-2xl border border-slate-100 p-5 text-center shadow-sm">
                     <p class="text-[9px] font-black uppercase text-slate-400 mb-1">Units Graded</p>
@@ -1332,14 +1387,14 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
             </div>
 
             <?php else: ?>
-            <div class="space-y-6">
+            <div class="space-y-6" id="res-cards-container">
             <?php foreach ($units_with_marks as $uwm):
+                $ci_key = array_search($uwm['course_title'] ?? 'General', $res_course_keys);
                 $has_m = $uwm['any_marks'];
                 $pct3  = $uwm['pct'];
                 [$grade3, $gClass3] = $pct3 !== null ? $grade_fn_s($pct3) : ['—','text-slate-300 bg-slate-50 border-slate-100'];
             ?>
-            <div class="bg-white rounded-2xl border <?php echo $has_m ? 'border-slate-100' : 'border-dashed border-slate-200'; ?> overflow-hidden shadow-sm">
-                <!-- Unit header -->
+            <div class="bg-white rounded-2xl border <?php echo $has_m ? 'border-slate-100' : 'border-dashed border-slate-200'; ?> overflow-hidden shadow-sm res-card" data-course="course-<?php echo $ci_key; ?>">
                 <div class="px-6 py-4 flex items-center justify-between bg-gradient-to-r from-slate-50 to-blue-50/30 border-b border-slate-100">
                     <div>
                         <div class="flex items-center gap-2 mb-0.5">
@@ -1374,7 +1429,6 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
                 </div>
 
                 <?php else: ?>
-                <!-- Assessment breakdown -->
                 <div class="px-6 py-4">
                     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
                     <?php foreach ($uwm['assessments'] as $a3):
@@ -1413,7 +1467,6 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
                     </div>
 
                     <?php if ($has_m): ?>
-                    <!-- Final score bar -->
                     <div class="flex items-center justify-between mb-1.5">
                         <span class="text-[10px] font-black uppercase text-slate-500">Final Score</span>
                         <span class="text-[10px] font-black text-slate-600"><?php echo number_format($uwm['sum_marks'],1); ?> / <?php echo number_format($uwm['sum_max'],1); ?> &nbsp;(<?php echo $pct3; ?>%)</span>
@@ -1431,14 +1484,8 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
             </div>
             <?php endif; ?>
         </div>
-        <!-- END MY RESULTS -->
-
-        <!-- ── MY ATTENDANCE ──────────────────────────────────────────── -->
         <div id="view-my-attendance" class="view-section p-4 lg:p-8">
             <style>
-            .att-course-tab { display:inline-flex; align-items:center; gap:7px; padding:8px 16px; border-radius:10px; font-size:12px; font-weight:700; cursor:pointer; border:1.5px solid #e2e8f0; background:#fff; color:#64748b; transition:all .2s; white-space:nowrap; }
-            .att-course-tab:hover { border-color:#3b82f6; color:#3b82f6; background:#eff6ff; }
-            .att-course-tab.active { background:#3b82f6; color:#fff; border-color:#3b82f6; box-shadow:0 4px 12px rgba(59,130,246,.3); }
             .att-unit-card { background:#fff; border-radius:18px; border:1.5px solid #e2e8f0; overflow:hidden; margin-bottom:14px; transition:box-shadow .2s; }
             .att-unit-card:hover { box-shadow:0 6px 20px rgba(0,0,0,.07); }
             .att-unit-card.barred { border-color:#fca5a5; background:#fff8f8; }
@@ -1446,7 +1493,6 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
             .att-unit-card { animation:attIn .35s ease forwards; }
             </style>
 
-            <!-- Header -->
             <div class="mb-5">
                 <h2 class="text-xl font-black text-slate-900 lg:text-2xl">My Attendance</h2>
                 <p class="text-slate-400 text-xs mt-1">Click a course tab to view its unit attendance. Absences above 33.33% = exam barred.</p>
@@ -1480,26 +1526,22 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
                 if (!isset($att_by_course[$ct])) $att_by_course[$ct] = [];
                 $att_by_course[$ct][] = $att;
             }
-            $course_keys = array_keys($att_by_course);
-            $first_course_id = 'att-course-0';
+            $att_course_keys = array_keys($att_by_course);
             ?>
 
-            <!-- Course filter tabs -->
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;overflow-x:auto;padding-bottom:4px;">
-                <button class="att-course-tab active" onclick="filterAttCourse('all',this)">
+                <button class="att-course-tab att-tab active" onclick="filterAttCourse('all', this)">
                     <i class="fa-solid fa-layer-group"></i> All Units
                     <span style="background:rgba(255,255,255,.25);padding:1px 7px;border-radius:10px;font-size:10px;"><?php echo count($student_attendance); ?></span>
                 </button>
-                <?php foreach ($course_keys as $ci => $cname): ?>
-                <button class="att-course-tab" onclick="filterAttCourse('course-<?php echo $ci; ?>',this)">
-                    <i class="fa-solid fa-book-open"></i>
-                    <?php echo htmlspecialchars($cname); ?>
+                <?php foreach ($att_course_keys as $ci => $cname): ?>
+                <button class="att-course-tab att-tab" onclick="filterAttCourse('course-<?php echo $ci; ?>', this)">
+                    <i class="fa-solid fa-book-open"></i> <?php echo htmlspecialchars($cname); ?>
                     <span style="background:#e2e8f0;color:#475569;padding:1px 7px;border-radius:10px;font-size:10px;"><?php echo count($att_by_course[$cname]); ?></span>
                 </button>
                 <?php endforeach; ?>
             </div>
 
-            <!-- Unit cards (each tagged with course group) -->
             <div id="att-cards-container">
                 <?php foreach ($student_attendance as $ai => $att):
                     $apct   = floatval($att['absence_pct'] ?? 0);
@@ -1507,14 +1549,13 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
                     $barred = $att['barred'];
                     $color  = $barred ? '#ef4444' : ($apct > 20 ? '#f59e0b' : '#10b981');
                     $border = $barred ? 'barred' : '';
-                    // find which course index this unit belongs to
-                    $ci_key = array_search($att['course_title'] ?? 'General', $course_keys);
+                    // Match to correct string index
+                    $ci_key = array_search($att['course_title'] ?? 'General', $att_course_keys);
                 ?>
                 <div class="att-unit-card <?php echo $border; ?>"
                      data-course="course-<?php echo $ci_key; ?>"
                      style="animation-delay:<?php echo ($ai * 0.04); ?>s">
 
-                    <!-- Unit header -->
                     <div style="padding:14px 20px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:linear-gradient(135deg,#f8fafc,#eff6ff20);">
                         <div>
                             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
@@ -1541,12 +1582,10 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
                         <?php endif; ?>
                     </div>
 
-                    <!-- Unit body -->
                     <div style="padding:16px 20px;">
                         <?php if ($att['total_sessions'] == 0): ?>
                         <p style="color:#94a3b8;font-size:12px;text-align:center;padding:10px 0;font-style:italic;">No attendance sessions recorded yet.</p>
                         <?php else: ?>
-                        <!-- Stats -->
                         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px;">
                             <div style="text-align:center;background:#f8fafc;border-radius:12px;padding:12px 8px;">
                                 <div style="font-size:22px;font-weight:900;color:#0f172a;"><?php echo intval($att['total_sessions']); ?></div>
@@ -1561,7 +1600,6 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
                                 <div style="font-size:9px;font-weight:800;text-transform:uppercase;color:#94a3b8;letter-spacing:.06em;margin-top:2px;">Absent</div>
                             </div>
                         </div>
-                        <!-- Progress bar -->
                         <div>
                             <div style="display:flex;justify-content:space-between;font-size:10px;font-weight:800;text-transform:uppercase;margin-bottom:5px;">
                                 <span style="color:#10b981;">Present: <?php echo $ppct; ?>%</span>
@@ -1571,7 +1609,6 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
                                 <div style="width:<?php echo $ppct; ?>%;background:#10b981;height:100%;border-radius:9999px 0 0 9999px;transition:width 1s ease;"></div>
                                 <div style="width:<?php echo min(100,$apct); ?>%;background:<?php echo $color; ?>;height:100%;transition:width 1s ease;"></div>
                             </div>
-                            <!-- 33.33% marker -->
                             <div style="position:relative;margin-top:4px;">
                                 <div style="position:absolute;left:33.33%;width:2px;height:8px;background:#ef4444;opacity:.5;border-radius:1px;top:-12px;"></div>
                                 <div style="font-size:9px;color:#ef4444;opacity:.7;padding-left:calc(33.33% - 20px);">33.33% limit</div>
@@ -1582,37 +1619,9 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
                 </div>
                 <?php endforeach; ?>
             </div>
-
             <?php endif; ?>
-
-            <script>
-            function filterAttCourse(group, btn) {
-                // Update active tab
-                document.querySelectorAll('.att-course-tab').forEach(t => t.classList.remove('active'));
-                btn.classList.add('active');
-
-                // Show/hide cards
-                document.querySelectorAll('#att-cards-container .att-unit-card').forEach(card => {
-                    if (group === 'all' || card.dataset.course === group) {
-                        card.style.display = '';
-                        // Re-trigger animation
-                        card.style.animation = 'none';
-                        card.offsetHeight;
-                        card.style.animation = '';
-                    } else {
-                        card.style.display = 'none';
-                    }
-                });
-            }
-            </script>
         </div>
-        <!-- END MY ATTENDANCE -->
-
-
-    <!-- ══════════════════════════════════════════════════════════════ -->
-    <!-- FEES & PAYMENTS SECTION -->
-    <!-- ══════════════════════════════════════════════════════════════ -->
-    <div id="view-my-fees" class="view-section">
+        <div id="view-my-fees" class="view-section">
     <style>
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
 
@@ -1700,7 +1709,6 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
 
     <div class="fp-wrap fp-anim">
 
-        <!-- ── Page header ──────────────────────────────────── -->
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:20px;">
             <div>
                 <h1 style="font-size:20px;font-weight:900;color:#0f172a;letter-spacing:-.4px;margin:0;">Fees &amp; Payments</h1>
@@ -1717,7 +1725,6 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
             <?php endif; ?>
         </div>
 
-        <!-- ── Reminders ────────────────────────────────────── -->
         <?php foreach (array_filter($fee_reminders, fn($r)=>!$r['is_read']) as $rem): ?>
         <div class="fp-reminder">
             <div style="width:32px;height:32px;border-radius:9px;background:#f59e0b;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
@@ -1732,7 +1739,6 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
         </div>
         <?php endforeach; ?>
 
-        <!-- ── CLEARED banner (show only when fully paid) ───── -->
         <?php if ($total_fees_assigned > 0 && $total_fee_balance <= 0): ?>
         <div class="fp-cleared">
             <div class="fp-cleared-icon">
@@ -1746,16 +1752,13 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
         </div>
         <?php endif; ?>
 
-        <!-- ── KPI cards ────────────────────────────────────── -->
         <div class="fp-kpi-grid">
-            <!-- Total Fees -->
             <div class="fp-kpi">
                 <div class="bar" style="background:#0f172a;"></div>
                 <div class="fp-kpi-label">Total Fees</div>
                 <div class="fp-kpi-val" style="color:#0f172a;">KES <?php echo number_format($total_fees_assigned,0); ?></div>
                 <div class="fp-kpi-sub" style="color:#94a3b8;"><?php echo count($fee_assignments); ?> fee<?php echo count($fee_assignments)!=1?'s':''; ?> assigned</div>
             </div>
-            <!-- Paid -->
             <div class="fp-kpi">
                 <div class="bar" style="background:#10b981;"></div>
                 <div class="fp-kpi-label">Amount Paid</div>
@@ -1763,7 +1766,6 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
                 <div class="fp-prog"><div class="fp-prog-fill" style="width:<?php echo $fee_collection_pct; ?>%;background:#10b981;"></div></div>
                 <div class="fp-kpi-sub" style="color:#94a3b8;"><?php echo $fee_collection_pct; ?>% of total</div>
             </div>
-            <!-- Balance -->
             <?php
             $bal_color = $total_fee_balance <= 0 ? '#10b981' : ($has_overdue_fees ? '#ef4444' : '#f59e0b');
             $bal_text  = $total_fee_balance <= 0 ? '✓ Cleared' : 'KES '.number_format($total_fee_balance,0);
@@ -1775,7 +1777,6 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
                 <div class="fp-kpi-val" style="color:<?php echo $bal_color; ?>;"><?php echo $bal_text; ?></div>
                 <div class="fp-kpi-sub" style="color:<?php echo $bal_color; ?>;"><?php echo $bal_sub; ?></div>
             </div>
-            <!-- Transactions -->
             <div class="fp-kpi">
                 <div class="bar" style="background:#3b82f6;"></div>
                 <div class="fp-kpi-label">Transactions</div>
@@ -1784,7 +1785,6 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
             </div>
         </div>
 
-        <!-- ── Fee Schedule ──────────────────────────────────── -->
         <div class="fp-card">
             <div class="fp-card-head">
                 <div class="fp-card-icon" style="background:#d1fae5;">
@@ -1813,7 +1813,6 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
             ];
             ?>
 
-            <!-- DESKTOP table -->
             <div class="fp-tbl-wrap">
             <table class="fp-tbl">
                 <thead>
@@ -1872,7 +1871,6 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
             </table>
             </div>
 
-            <!-- MOBILE cards -->
             <div class="fp-mob-list">
                 <?php foreach ($fee_assignments as $fa):
                     $fa_bal  = floatval($fa['balance']);
@@ -1925,7 +1923,6 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
             <?php endif; ?>
         </div>
 
-        <!-- ── Payment History ───────────────────────────────── -->
         <div class="fp-card">
             <div class="fp-card-head">
                 <div class="fp-card-icon" style="background:#dbeafe;">
@@ -1950,7 +1947,6 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
                 'online'=>['fa-globe','#06b6d4'],'scholarship'=>['fa-graduation-cap','#f59e0b']];
             ?>
 
-            <!-- DESKTOP payment table -->
             <div class="fp-tbl-wrap fp-pay-tbl">
             <table class="fp-tbl">
                 <thead>
@@ -1974,7 +1970,6 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
             </table>
             </div>
 
-            <!-- MOBILE payment cards -->
             <div class="fp-pay-mob-list">
                 <?php foreach ($fee_payments_history as $ph):
                     [$mic,$mcol] = $meth_meta[$ph['payment_method']] ?? ['fa-circle','#94a3b8'];
@@ -1999,13 +1994,8 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
             <?php endif; ?>
         </div>
 
-    </div><!-- /.fp-wrap -->
-    </div>
-    <!-- END FEES SECTION -->
-
-
-    
-        <div id="chatbot-container">
+    </div></div>
+    <div id="chatbot-container">
         <div id="chatbot-window">
             <div id="chatbot-header">
                 <div class="flex items-center space-x-2">
@@ -2038,49 +2028,111 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
         }
 
         function switchView(viewId) {
+            // hide all views
             document.querySelectorAll('.view-section').forEach(v => v.classList.remove('active'));
-            document.getElementById('view-' + viewId).classList.add('active');
+            let targetView = document.getElementById('view-' + viewId);
             
-            // Remove active state from all items
+            // Default to overview if target isn't found
+            if (!targetView) {
+                viewId = 'overview';
+                targetView = document.getElementById('view-overview');
+            }
+            targetView.classList.add('active');
+            
+            // Remove active state from all sidebar items
             document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('sidebar-active'));
             
-            // Add active state to selected item
-            if (viewId === 'overview') document.getElementById('nav-overview').classList.add('sidebar-active');
-            if (viewId === 'schedule') document.getElementById('nav-schedule').classList.add('sidebar-active');
-            if (viewId === 'assignments') document.getElementById('nav-assignments').classList.add('sidebar-active');
-            if (viewId === 'my-units') document.getElementById('nav-my-units').classList.add('sidebar-active');
-            if (viewId === 'my-results') document.getElementById('nav-my-results').classList.add('sidebar-active');
-            if (viewId === 'my-attendance') document.getElementById('nav-my-attendance').classList.add('sidebar-active');
-            if (viewId === 'my-fees') { const n = document.getElementById('nav-my-fees'); if(n) n.classList.add('sidebar-active'); }
+            // Add active state to selected sidebar item
+            const navIds = ['overview', 'schedule', 'assignments', 'my-units', 'my-results', 'my-attendance', 'my-fees'];
+            if (navIds.includes(viewId)) {
+                const navEl = document.getElementById('nav-' + viewId);
+                if (navEl) navEl.classList.add('sidebar-active');
+            }
             
-            document.getElementById('page-title').innerText = viewId.replace('-', ' ').toUpperCase();
+            // Update Page title
+            const titleEl = document.getElementById('page-title');
+            if (titleEl) {
+                titleEl.innerText = viewId.replace(/-/g, ' ').toUpperCase();
+            }
+
+            // Save state to local storage so page reloads don't reset to overview
+            localStorage.setItem('active_dashboard_tab', viewId);
+        }
+
+        // ── Filtering Scripts ──
+        function filterSchCourse(group, btn) {
+            document.querySelectorAll('.sch-tab').forEach(t => t.classList.remove('active'));
+            btn.classList.add('active');
+            document.querySelectorAll('#sch-cards-container .sch-card').forEach(card => {
+                if (group === 'all' || card.dataset.course === group) {
+                    card.style.display = '';
+                    card.style.animation = 'none';
+                    card.offsetHeight;
+                    card.style.animation = '';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+        }
+
+        function filterUnitCourse(group, btn) {
+            document.querySelectorAll('.unit-tab').forEach(t => t.classList.remove('active'));
+            btn.classList.add('active');
+            document.querySelectorAll('#units-cards-container .unit-card').forEach(card => {
+                if (group === 'all' || card.dataset.course === group) {
+                    card.style.display = '';
+                    card.style.animation = 'none';
+                    card.offsetHeight;
+                    card.style.animation = '';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+        }
+
+        function filterResCourse(group, btn) {
+            document.querySelectorAll('.res-tab').forEach(t => t.classList.remove('active'));
+            btn.classList.add('active');
+            document.querySelectorAll('#res-cards-container .res-card').forEach(card => {
+                if (group === 'all' || card.dataset.course === group) {
+                    card.style.display = '';
+                    card.style.animation = 'none';
+                    card.offsetHeight;
+                    card.style.animation = '';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+        }
+
+        function filterAttCourse(group, btn) {
+            document.querySelectorAll('.att-tab').forEach(t => t.classList.remove('active'));
+            btn.classList.add('active');
+            document.querySelectorAll('#att-cards-container .att-unit-card').forEach(card => {
+                if (group === 'all' || card.dataset.course === group) {
+                    card.style.display = '';
+                    card.style.animation = 'none';
+                    card.offsetHeight;
+                    card.style.animation = '';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
         }
 
         // ── Unit filtering: called when student clicks "View Units" on a course card ──
         function openCourseUnits(courseId, courseName) {
             switchView('my-units');
-            // Update title
-            document.getElementById('units-page-title').textContent = courseName + ' — Units';
-            document.getElementById('units-page-sub').textContent   = 'Units available for ' + courseName + '. Register for the ones you want to take.';
-            document.getElementById('units-show-all-btn').classList.remove('hidden');
-            // Show only this course's blocks
-            document.querySelectorAll('.course-unit-block').forEach(function(el) {
-                if (parseInt(el.dataset.courseId) === courseId) {
-                    el.style.display = '';
-                    el.style.animation = 'fadeIn 0.3s ease';
-                } else {
-                    el.style.display = 'none';
-                }
-            });
-        }
-
-        function showAllCourseUnits() {
-            document.getElementById('units-page-title').textContent = 'My Units';
-            document.getElementById('units-page-sub').textContent   = 'Register for the units you want to take within each enrolled course.';
-            document.getElementById('units-show-all-btn').classList.add('hidden');
-            document.querySelectorAll('.course-unit-block').forEach(function(el) {
-                el.style.display = '';
-            });
+            
+            // Auto click the correct filter tab for this course
+            const targetTab = document.querySelector('.unit-tab[data-original-id="'+courseId+'"]');
+            if (targetTab) {
+                targetTab.click();
+            } else {
+                // Fallback
+                const allTab = document.querySelector('.unit-tab');
+                if(allTab) allTab.click();
+            }
         }
 
         // ── Unit materials loader (called when student clicks Materials) ──
@@ -2378,6 +2430,10 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
         // Trigger on page load
         window.addEventListener('DOMContentLoaded', () => {
             loadAIAnalysis();
+            
+            // Restore active view on load from LocalStorage
+            const savedTab = localStorage.getItem('active_dashboard_tab') || 'overview';
+            switchView(savedTab);
 
             // Animate mastery progress bars: start at 0%, ease to data-target
             setTimeout(() => {
