@@ -3,9 +3,9 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: May 18, 2026 at 11:46 AM
+-- Generation Time: Jul 16, 2026 at 01:21 PM
 -- Server version: 10.4.32-MariaDB
--- PHP Version: 8.2.12
+-- PHP Version: 8.0.30
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
 START TRANSACTION;
@@ -114,6 +114,114 @@ INSERT INTO `attendance_sessions` (`id`, `unit_id`, `lecturer_id`, `session_date
 (1, 1, 5, '2026-05-09', 'Lecture', '2026-05-09 20:45:18'),
 (2, 2, 9, '2026-05-09', 'Lecture', '2026-05-09 20:57:17'),
 (3, 2, 9, '2026-05-10', 'Lecture', '2026-05-10 08:25:43');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `boarding_allocations`
+--
+
+CREATE TABLE `boarding_allocations` (
+  `id` int(11) NOT NULL,
+  `student_id` int(11) NOT NULL,
+  `dorm_id` int(11) NOT NULL,
+  `room_id` int(11) DEFAULT NULL,
+  `bed_number` varchar(10) DEFAULT NULL,
+  `academic_year` varchar(20) NOT NULL,
+  `semester` varchar(30) NOT NULL DEFAULT 'Semester 1',
+  `check_in_date` date DEFAULT NULL,
+  `check_out_date` date DEFAULT NULL,
+  `status` enum('active','vacated','transferred','pending') NOT NULL DEFAULT 'pending',
+  `allocated_by` int(11) NOT NULL,
+  `notes` text DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `boarding_dorms`
+--
+
+CREATE TABLE `boarding_dorms` (
+  `id` int(11) NOT NULL,
+  `name` varchar(100) NOT NULL,
+  `gender` enum('male','female') NOT NULL,
+  `capacity` int(11) NOT NULL DEFAULT 20,
+  `floor_count` int(11) DEFAULT 1,
+  `description` text DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `boarding_dorms`
+--
+
+INSERT INTO `boarding_dorms` (`id`, `name`, `gender`, `capacity`, `floor_count`, `description`, `created_at`) VALUES
+(1, 'Elgon', 'female', 40, 1, NULL, '2026-07-16 11:20:19'),
+(2, 'Classic', 'female', 40, 1, NULL, '2026-07-16 11:20:19'),
+(3, 'VIP', 'female', 30, 1, NULL, '2026-07-16 11:20:19'),
+(4, 'Bakhita', 'female', 40, 1, NULL, '2026-07-16 11:20:19'),
+(5, 'Stardorm', 'female', 40, 1, NULL, '2026-07-16 11:20:19'),
+(6, 'Rhunda', 'female', 40, 1, NULL, '2026-07-16 11:20:19'),
+(7, 'Lavington', 'female', 40, 1, NULL, '2026-07-16 11:20:19'),
+(8, 'Ikolomani', 'female', 40, 1, NULL, '2026-07-16 11:20:19'),
+(9, 'Highrise', 'female', 40, 1, NULL, '2026-07-16 11:20:19'),
+(10, 'Chairlady', 'female', 40, 1, NULL, '2026-07-16 11:20:19'),
+(11, 'Tanzania', 'female', 40, 1, NULL, '2026-07-16 11:20:19'),
+(12, 'Ayomi', 'female', 40, 1, NULL, '2026-07-16 11:20:19'),
+(13, 'Kaveve Kazoze', 'female', 40, 1, NULL, '2026-07-16 11:20:19'),
+(14, 'Caren Muslims', 'female', 40, 1, NULL, '2026-07-16 11:20:19'),
+(15, 'Amazon', 'female', 40, 1, NULL, '2026-07-16 11:20:19'),
+(16, 'Lancaster 1', 'female', 40, 1, NULL, '2026-07-16 11:20:19'),
+(17, 'Lancaster 2', 'female', 40, 1, NULL, '2026-07-16 11:20:19'),
+(18, 'Lancaster 3', 'female', 40, 1, NULL, '2026-07-16 11:20:19'),
+(19, 'Lancaster 4', 'female', 40, 1, NULL, '2026-07-16 11:20:19'),
+(20, 'Lancaster 5', 'female', 40, 1, NULL, '2026-07-16 11:20:19'),
+(21, 'Pentagon', 'male', 40, 1, NULL, '2026-07-16 11:20:19'),
+(22, 'Babylon', 'male', 40, 1, NULL, '2026-07-16 11:20:19'),
+(23, 'Kingstore', 'male', 40, 1, NULL, '2026-07-16 11:20:19'),
+(24, 'Muslims (Easleigh)', 'male', 40, 1, NULL, '2026-07-16 11:20:19'),
+(25, 'Westgate A', 'male', 40, 1, NULL, '2026-07-16 11:20:19'),
+(26, 'Westgate B', 'male', 40, 1, NULL, '2026-07-16 11:20:19'),
+(27, 'Statehouse (Boys)', 'male', 40, 1, NULL, '2026-07-16 11:20:19'),
+(28, 'White House', 'male', 40, 1, NULL, '2026-07-16 11:20:19'),
+(29, 'Muslim 2', 'male', 40, 1, NULL, '2026-07-16 11:20:19'),
+(30, 'Admin Dorm', 'male', 30, 1, NULL, '2026-07-16 11:20:19'),
+(31, 'Chiefs Dorm', 'male', 30, 1, NULL, '2026-07-16 11:20:19');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `boarding_notices`
+--
+
+CREATE TABLE `boarding_notices` (
+  `id` int(11) NOT NULL,
+  `title` varchar(200) NOT NULL,
+  `message` text NOT NULL,
+  `target` enum('all','male','female','specific_dorm') DEFAULT 'all',
+  `dorm_id` int(11) DEFAULT NULL,
+  `priority` enum('normal','urgent','info') DEFAULT 'normal',
+  `posted_by` int(11) NOT NULL,
+  `is_active` tinyint(4) DEFAULT 1,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `boarding_rooms`
+--
+
+CREATE TABLE `boarding_rooms` (
+  `id` int(11) NOT NULL,
+  `dorm_id` int(11) NOT NULL,
+  `room_number` varchar(20) NOT NULL,
+  `capacity` int(11) NOT NULL DEFAULT 4,
+  `floor` int(11) DEFAULT 1,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
 
@@ -264,6 +372,126 @@ INSERT INTO `fee_structures` (`id`, `name`, `description`, `amount`, `fee_catego
 (3, 'Examination Fee 2025/26', 'End of year examination registration', 3500.00, 'examination', '2025/2026', 'Full Year', NULL, 1, NULL, '2026-05-17 18:34:20'),
 (4, 'Library Access Fee 2025/26', 'Annual library membership and resources', 1500.00, 'library', '2025/2026', 'Full Year', NULL, 1, NULL, '2026-05-17 18:34:20'),
 (5, 'Student Activity Fee 2025/26', 'Student union and extracurricular', 1000.00, 'activity', '2025/2026', 'Full Year', NULL, 0, NULL, '2026-05-17 18:34:20');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `hr_announcements`
+--
+
+CREATE TABLE `hr_announcements` (
+  `id` int(11) NOT NULL,
+  `title` varchar(200) NOT NULL,
+  `message` text NOT NULL,
+  `target_department` varchar(100) DEFAULT NULL,
+  `priority` enum('normal','urgent','info') DEFAULT 'normal',
+  `posted_by` int(11) NOT NULL,
+  `is_active` tinyint(4) DEFAULT 1,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `hr_leave_requests`
+--
+
+CREATE TABLE `hr_leave_requests` (
+  `id` int(11) NOT NULL,
+  `staff_id` int(11) NOT NULL,
+  `leave_type` enum('annual','sick','maternity','paternity','emergency','unpaid','other') DEFAULT 'annual',
+  `start_date` date NOT NULL,
+  `end_date` date NOT NULL,
+  `days_requested` int(11) NOT NULL DEFAULT 1,
+  `reason` text DEFAULT NULL,
+  `status` enum('pending','approved','rejected','cancelled') DEFAULT 'pending',
+  `reviewed_by` int(11) DEFAULT NULL,
+  `review_notes` text DEFAULT NULL,
+  `reviewed_at` timestamp NULL DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `hr_payroll`
+--
+
+CREATE TABLE `hr_payroll` (
+  `id` int(11) NOT NULL,
+  `staff_id` int(11) NOT NULL,
+  `pay_period` varchar(30) NOT NULL,
+  `basic_salary` decimal(12,2) DEFAULT 0.00,
+  `allowances` decimal(12,2) DEFAULT 0.00,
+  `overtime` decimal(12,2) DEFAULT 0.00,
+  `gross_pay` decimal(12,2) DEFAULT 0.00,
+  `paye` decimal(12,2) DEFAULT 0.00,
+  `nhif` decimal(12,2) DEFAULT 0.00,
+  `nssf` decimal(12,2) DEFAULT 0.00,
+  `other_deductions` decimal(12,2) DEFAULT 0.00,
+  `net_pay` decimal(12,2) DEFAULT 0.00,
+  `payment_method` enum('bank_transfer','cash','mpesa','cheque') DEFAULT 'bank_transfer',
+  `status` enum('draft','processed','paid') DEFAULT 'draft',
+  `processed_by` int(11) DEFAULT NULL,
+  `processed_at` timestamp NULL DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `hr_performance`
+--
+
+CREATE TABLE `hr_performance` (
+  `id` int(11) NOT NULL,
+  `staff_id` int(11) NOT NULL,
+  `review_period` varchar(30) NOT NULL,
+  `attendance_score` decimal(4,1) DEFAULT 0.0,
+  `performance_score` decimal(4,1) DEFAULT 0.0,
+  `teamwork_score` decimal(4,1) DEFAULT 0.0,
+  `initiative_score` decimal(4,1) DEFAULT 0.0,
+  `overall_score` decimal(4,1) DEFAULT 0.0,
+  `comments` text DEFAULT NULL,
+  `reviewed_by` int(11) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `hr_staff`
+--
+
+CREATE TABLE `hr_staff` (
+  `id` int(11) NOT NULL,
+  `user_id` int(11) DEFAULT NULL,
+  `staff_no` varchar(30) DEFAULT NULL,
+  `full_name` varchar(150) NOT NULL,
+  `email` varchar(150) DEFAULT NULL,
+  `phone` varchar(30) DEFAULT NULL,
+  `gender` enum('male','female','other') DEFAULT NULL,
+  `date_of_birth` date DEFAULT NULL,
+  `national_id` varchar(30) DEFAULT NULL,
+  `department` varchar(100) DEFAULT NULL,
+  `job_title` varchar(150) DEFAULT NULL,
+  `job_type` enum('full_time','part_time','contract','intern') DEFAULT 'full_time',
+  `employment_date` date DEFAULT NULL,
+  `termination_date` date DEFAULT NULL,
+  `status` enum('active','on_leave','terminated','suspended') DEFAULT 'active',
+  `basic_salary` decimal(12,2) DEFAULT 0.00,
+  `allowances` decimal(12,2) DEFAULT 0.00,
+  `deductions` decimal(12,2) DEFAULT 0.00,
+  `bank_name` varchar(100) DEFAULT NULL,
+  `bank_account` varchar(50) DEFAULT NULL,
+  `emergency_contact` varchar(150) DEFAULT NULL,
+  `emergency_phone` varchar(30) DEFAULT NULL,
+  `address` text DEFAULT NULL,
+  `profile_notes` text DEFAULT NULL,
+  `created_by` int(11) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
 
@@ -806,7 +1034,7 @@ CREATE TABLE `users` (
   `full_name` varchar(100) NOT NULL,
   `email` varchar(100) NOT NULL,
   `password` varchar(255) NOT NULL,
-  `role` enum('student','lecturer','admin','financial_accountant') NOT NULL DEFAULT 'student',
+  `role` enum('student','lecturer','admin','financial_accountant','boarding_master','hr_manager') NOT NULL DEFAULT 'student',
   `course_id` int(11) DEFAULT NULL,
   `career_path` varchar(100) DEFAULT 'General Software Engineering',
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
@@ -821,7 +1049,9 @@ INSERT INTO `users` (`id`, `full_name`, `email`, `password`, `role`, `course_id`
 (4, 'System Admin', 'admin@smartlms.com', '$2y$10$.0OcfG4sTRsAOCtxn8iar.okY99T57aQvvMlv.yNYBNdmCbfViUtm', 'admin', NULL, 'General Software Engineering', '2026-04-11 21:45:41'),
 (5, 'Dr.smith', 'smith@gmail.com', '$2y$10$fZ1f6rlrYqK2LDDUM5DQxe2NWJbSRqjcVMchKntrQKTDgrf8Dk5hO', 'lecturer', 1, 'General Software Engineering', '2026-04-11 22:17:33'),
 (9, 'Lenny', 'lenny@gmail.com', '$2y$10$zISpLktT6AecVDh54Ugvqer4pvCa6fzYAEJchUoAtFfY9KrnKPsWa', 'lecturer', 3, 'General Software Engineering', '2026-04-30 18:02:11'),
-(12, 'Finance Office', 'finance@smartlms.com', '$2y$10$.A.HAqAdJVcR8Kqn/VFO7u/aDcEKYi0ZN6dEtj7IZ.HmMeyvyUC26', 'financial_accountant', NULL, 'General Software Engineering', '2026-05-18 09:29:22');
+(12, 'Finance Office', 'finance@smartlms.com', '$2y$10$.A.HAqAdJVcR8Kqn/VFO7u/aDcEKYi0ZN6dEtj7IZ.HmMeyvyUC26', 'financial_accountant', NULL, 'General Software Engineering', '2026-05-18 09:29:22'),
+(13, 'Boarding Master', 'boarding@smartlms.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'boarding_master', NULL, 'General Software Engineering', '2026-07-16 11:20:20'),
+(14, 'HR Manager', 'hr@smartlms.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'hr_manager', NULL, 'General Software Engineering', '2026-07-16 11:20:20');
 
 -- --------------------------------------------------------
 
@@ -891,6 +1121,35 @@ ALTER TABLE `attendance_sessions`
   ADD KEY `idx_lecturer` (`lecturer_id`);
 
 --
+-- Indexes for table `boarding_allocations`
+--
+ALTER TABLE `boarding_allocations`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uq_stu_year_sem` (`student_id`,`academic_year`,`semester`),
+  ADD KEY `dorm_id` (`dorm_id`),
+  ADD KEY `room_id` (`room_id`),
+  ADD KEY `student_id` (`student_id`);
+
+--
+-- Indexes for table `boarding_dorms`
+--
+ALTER TABLE `boarding_dorms`
+  ADD PRIMARY KEY (`id`);
+
+--
+-- Indexes for table `boarding_notices`
+--
+ALTER TABLE `boarding_notices`
+  ADD PRIMARY KEY (`id`);
+
+--
+-- Indexes for table `boarding_rooms`
+--
+ALTER TABLE `boarding_rooms`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `dorm_id` (`dorm_id`);
+
+--
 -- Indexes for table `courses`
 --
 ALTER TABLE `courses`
@@ -935,6 +1194,43 @@ ALTER TABLE `fee_structures`
   ADD PRIMARY KEY (`id`),
   ADD KEY `idx_course` (`course_id`),
   ADD KEY `idx_year` (`academic_year`);
+
+--
+-- Indexes for table `hr_announcements`
+--
+ALTER TABLE `hr_announcements`
+  ADD PRIMARY KEY (`id`);
+
+--
+-- Indexes for table `hr_leave_requests`
+--
+ALTER TABLE `hr_leave_requests`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `staff_id` (`staff_id`),
+  ADD KEY `status` (`status`);
+
+--
+-- Indexes for table `hr_payroll`
+--
+ALTER TABLE `hr_payroll`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `staff_id` (`staff_id`),
+  ADD KEY `pay_period` (`pay_period`);
+
+--
+-- Indexes for table `hr_performance`
+--
+ALTER TABLE `hr_performance`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `staff_id` (`staff_id`);
+
+--
+-- Indexes for table `hr_staff`
+--
+ALTER TABLE `hr_staff`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `department` (`department`),
+  ADD KEY `status` (`status`);
 
 --
 -- Indexes for table `materials`
@@ -1098,6 +1394,30 @@ ALTER TABLE `attendance_sessions`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
 
 --
+-- AUTO_INCREMENT for table `boarding_allocations`
+--
+ALTER TABLE `boarding_allocations`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `boarding_dorms`
+--
+ALTER TABLE `boarding_dorms`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=32;
+
+--
+-- AUTO_INCREMENT for table `boarding_notices`
+--
+ALTER TABLE `boarding_notices`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `boarding_rooms`
+--
+ALTER TABLE `boarding_rooms`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
 -- AUTO_INCREMENT for table `courses`
 --
 ALTER TABLE `courses`
@@ -1132,6 +1452,36 @@ ALTER TABLE `fee_reminders`
 --
 ALTER TABLE `fee_structures`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=6;
+
+--
+-- AUTO_INCREMENT for table `hr_announcements`
+--
+ALTER TABLE `hr_announcements`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `hr_leave_requests`
+--
+ALTER TABLE `hr_leave_requests`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `hr_payroll`
+--
+ALTER TABLE `hr_payroll`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `hr_performance`
+--
+ALTER TABLE `hr_performance`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `hr_staff`
+--
+ALTER TABLE `hr_staff`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `materials`
@@ -1233,7 +1583,7 @@ ALTER TABLE `unit_registrations`
 -- AUTO_INCREMENT for table `users`
 --
 ALTER TABLE `users`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=13;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=15;
 
 --
 -- Constraints for dumped tables

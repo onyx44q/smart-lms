@@ -272,6 +272,10 @@ $avgMastery = $decisionData['class_avg'] ?? 0; // combined quiz+exam avg from de
                     <p class="text-[10px] text-slate-500 mt-1 uppercase tracking-widest font-bold">Academic Staff</p>
                 </div>
             </div>
+            <a href="apply_leave.php" class="flex items-center space-x-3 p-2.5 rounded-xl hover:bg-amber-500/10 text-amber-400 transition text-xs font-bold w-full">
+                <i class="fa-solid fa-calendar-minus text-sm flex-shrink-0"></i>
+                <span class="hidden lg:inline uppercase tracking-tighter">Apply for Leave</span>
+            </a>
             <a href="logout.php" class="flex items-center space-x-3 p-2.5 rounded-xl hover:bg-rose-500/10 text-rose-400 transition text-xs font-bold w-full">
                 <i class="fa-solid fa-right-from-bracket text-sm flex-shrink-0"></i>
                 <span class="hidden lg:inline uppercase tracking-tighter">Sign Out</span>

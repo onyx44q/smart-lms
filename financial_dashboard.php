@@ -279,7 +279,7 @@ $receipt_flash = $_GET['receipt'] ?? '';
 body { background: var(--surface); color: var(--text-main); }
 
 /* Sidebar */
-.sidebar { background: var(--navy); width: 260px; min-height: 100vh; position: fixed; left:0; top:0; z-index:40; display:flex; flex-direction:column; }
+.sidebar { background: var(--navy); width: 260px; min-height: 100vh; height: 100vh; overflow-y: auto; position: fixed; left:0; top:0; z-index:40; display:flex; flex-direction:column; }
 .sidebar-logo { padding: 28px 24px 20px; border-bottom: 1px solid rgba(255,255,255,0.07); }
 .sidebar-logo .brand { font-size: 20px; font-weight: 800; color: #fff; letter-spacing: -0.5px; }
 .sidebar-logo .brand span { color: var(--emerald); }
@@ -503,6 +503,9 @@ body { background: var(--surface); color: var(--text-main); }
                 <div style="font-size:10px;color:rgba(255,255,255,0.4);">Financial Accountant</div>
             </div>
         </div>
+        <a href="apply_leave.php" class="nav-item" style="margin-top:4px;color:#f59e0b;">
+            <span class="icon"><i class="fa-solid fa-calendar-minus"></i></span> Apply for Leave
+        </a>
         <a href="logout.php" class="nav-item" style="margin-top:4px;">
             <span class="icon"><i class="fa-solid fa-arrow-right-from-bracket"></i></span> Sign Out
         </a>
@@ -782,6 +785,7 @@ body { background: var(--surface); color: var(--text-main); }
                                 <button onclick="openAssignModal(<?= $s['id'] ?>, '<?= addslashes($s['full_name']) ?>')" class="btn btn-ghost btn-sm"><i class="fa-solid fa-file-invoice"></i> Assign</button>
                                 <button onclick="openReminderModal(<?= $s['id'] ?>, '<?= addslashes($s['full_name']) ?>')" class="btn btn-ghost btn-sm" style="color:var(--gold);"><i class="fa-solid fa-bell"></i></button>
                                 <button onclick="viewStudentLedger(<?= $s['id'] ?>)" class="btn btn-ghost btn-sm"><i class="fa-solid fa-eye"></i></button>
+                                <a href="fee_statement.php?student_id=<?= $s['id'] ?>" target="_blank" class="btn btn-ghost btn-sm" style="color:#c9a84c;border-color:rgba(201,168,76,.3);text-decoration:none;" title="Download Fee Statement"><i class="fa-solid fa-file-arrow-down"></i> Statement</a>
                             </div>
                         </td>
                     </tr>

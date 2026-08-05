@@ -156,7 +156,7 @@ if ($view_course_id) {
 }
 
 // Student career path
-$studentInfo = mysqli_fetch_assoc(mysqli_query($conn, "SELECT career_path FROM users WHERE id = '$user_id'"));
+$studentInfo = mysqli_fetch_assoc(mysqli_query($conn, "SELECT career_path, admission_number FROM users WHERE id = '$user_id'"));
 $careerPath  = $studentInfo['career_path'] ?? 'General';
 
 // ── Assignments — scoped to the selected course ───────────────────────
@@ -363,8 +363,12 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
         .sidebar-active { background: #eff6ff; border-left: 4px solid #3b82f6; color: #1d4ed8 !important; }
         .view-section { display: none; }
         .view-section.active { display: block; }
-        .dropdown-content { max-height: 0; overflow: hidden; transition: max-height 0.3s ease-out; }
-        .dropdown-active .dropdown-content { max-height: 200px; }
+        .dropdown-content { max-height: 0; overflow: hidden; transition: max-height 0.35s ease-out; }
+        .dropdown-active .dropdown-content { max-height: 300px; }
+        /* Sidebar nav scrolls independently so logout stays pinned */
+        .sidebar-nav { overflow-y: auto !important; overflow-x: hidden; flex: 1; min-height: 0; }
+        .sidebar-nav::-webkit-scrollbar { width: 2px; }
+        .sidebar-nav::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 2px; }
         @keyframes slide-in { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
         .animate-slide-in { animation: slide-in 0.4s ease-out forwards; }
 
@@ -463,13 +467,13 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
         <script>setTimeout(() => { document.getElementById('toast').style.opacity = '0'; setTimeout(() => document.getElementById('toast').remove(), 500); }, 3000);</script>
     <?php endif; ?>
 
-    <aside class="w-64 border-r border-slate-200 hidden md:flex flex-col bg-white sticky top-0 h-screen">
-        <div class="p-8 flex items-center space-x-2">
+    <aside class="w-64 border-r border-slate-200 hidden md:flex flex-col bg-white sticky top-0 h-screen overflow-hidden">
+        <div class="p-8 flex items-center space-x-2 flex-shrink-0">
             <i class="fa-solid fa-brain text-blue-600 text-xl"></i>
             <span class="text-slate-900 font-black tracking-tighter text-lg uppercase">Smart<span class="text-blue-600">LMS</span></span>
         </div>
         
-        <nav class="flex-1 px-4 space-y-1 mt-4">
+        <nav class="sidebar-nav px-4 space-y-1 mt-4">
             <a href="javascript:void(0)" onclick="switchView('overview')" id="nav-overview" class="sidebar-active sidebar-item flex items-center space-x-3 p-3 rounded-xl transition-all">
                 <i class="fa-solid fa-house w-5"></i> <span class="text-xs uppercase tracking-wider">Overview</span>
             </a>
@@ -509,6 +513,16 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
                 <?php endif; ?>
             </a>
 
+            <a href="javascript:void(0)" onclick="switchView('my-results-full')" id="nav-my-results-full" class="sidebar-item flex items-center space-x-3 p-3 rounded-xl transition-all text-slate-500">
+                <i class="fa-solid fa-graduation-cap w-5" style="color:#8b5cf6;"></i>
+                <span class="text-xs uppercase tracking-wider">Result Slip</span>
+            </a>
+
+            <a href="javascript:void(0)" onclick="switchView('my-boarding')" id="nav-my-boarding" class="sidebar-item flex items-center space-x-3 p-3 rounded-xl transition-all text-slate-500">
+                <i class="fa-solid fa-bed w-5" style="color:#f59e0b;"></i>
+                <span class="text-xs uppercase tracking-wider">Boarding</span>
+            </a>
+
             <div id="course-dropdown">
                 <button onclick="toggleDropdown()" class="w-full sidebar-item flex items-center justify-between p-3 rounded-xl text-slate-500 transition-all">
                     <div class="flex items-center space-x-3">
@@ -524,7 +538,7 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
             </div>
         </nav>
 
-        <div class="p-4 border-t border-slate-100">
+        <div class="p-4 border-t border-slate-100 flex-shrink-0 bg-white">
             <a href="javascript:void(0);" onclick="confirmLogout()" class="flex items-center space-x-3 p-3 rounded-xl text-slate-400 hover:text-red-600 hover:bg-red-50 transition-all">
                 <i class="fa-solid fa-right-from-bracket"></i> <span class="text-xs font-bold uppercase tracking-widest">Logout</span>
             </a>
@@ -541,6 +555,9 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
                 <div class="text-right">
                     <p class="text-xs font-black text-slate-900 uppercase"><?php echo htmlspecialchars($_SESSION['user_name']); ?></p>
                     <p class="text-[10px] text-blue-600 font-bold uppercase tracking-widest">Student Account</p>
+                    <?php if (!empty($studentInfo['admission_number'])): ?>
+                    <p class="text-[9px] font-black tracking-widest" style="color:#6366f1;font-family:monospace;"><?php echo htmlspecialchars($studentInfo['admission_number']); ?></p>
+                    <?php endif; ?>
                 </div>
                 <div class="w-10 h-10 rounded-full bg-gradient-to-tr from-blue-700 to-blue-400 flex items-center justify-center font-bold text-white shadow-xl">
                     <?php echo substr($_SESSION['user_name'], 0, 1); ?>
@@ -548,6 +565,7 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
             </div>
         </header>
 
+        <div id="course-viewing-bar">
         <?php if ($enrolledCount > 1): ?>
         <div class="flex items-center space-x-2 mb-8 overflow-x-auto pb-1">
             <span class="text-[9px] font-black uppercase text-slate-400 tracking-widest flex-shrink-0 mr-2">
@@ -576,6 +594,8 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
         </div>
         <?php endif; ?>
         <?php endif; ?>
+
+        </div><!-- /course-viewing-bar -->
 
         <div id="view-overview" class="view-section active">
 
@@ -1714,15 +1734,20 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
                 <h1 style="font-size:20px;font-weight:900;color:#0f172a;letter-spacing:-.4px;margin:0;">Fees &amp; Payments</h1>
                 <p style="font-size:12px;color:#64748b;margin:3px 0 0;"><?php echo date('F Y'); ?> &nbsp;·&nbsp; Your financial account</p>
             </div>
-            <?php if ($unread_reminders > 0): ?>
-            <form method="POST" style="flex-shrink:0;">
-                <input type="hidden" name="mark_reminders_read" value="1">
-                <button type="submit" style="display:flex;align-items:center;gap:7px;background:#fef3c7;border:1.5px solid #fcd34d;color:#92400e;padding:8px 14px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;">
-                    <i class="fa-solid fa-bell"></i>
-                    <?php echo $unread_reminders; ?> New Reminder<?php echo $unread_reminders>1?'s':''; ?>
-                </button>
-            </form>
-            <?php endif; ?>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <a href="fee_statement.php" target="_blank" style="display:inline-flex;align-items:center;gap:7px;background:linear-gradient(135deg,#0a1628,#1e3a5f);color:#c9a84c;padding:9px 16px;border-radius:10px;font-size:12px;font-weight:800;text-decoration:none;border:1px solid rgba(201,168,76,.3);">
+                    <i class="fa-solid fa-file-invoice"></i> Download Fee Statement
+                </a>
+                <?php if ($unread_reminders > 0): ?>
+                <form method="POST" style="flex-shrink:0;">
+                    <input type="hidden" name="mark_reminders_read" value="1">
+                    <button type="submit" style="display:flex;align-items:center;gap:7px;background:#fef3c7;border:1.5px solid #fcd34d;color:#92400e;padding:8px 14px;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer;">
+                        <i class="fa-solid fa-bell"></i>
+                        <?php echo $unread_reminders; ?> New Reminder<?php echo $unread_reminders>1?'s':''; ?>
+                    </button>
+                </form>
+                <?php endif; ?>
+            </div>
         </div>
 
         <?php foreach (array_filter($fee_reminders, fn($r)=>!$r['is_read']) as $rem): ?>
@@ -1995,6 +2020,255 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
         </div>
 
     </div></div>
+
+    </div><!-- /fp-wrap -->
+    </div><!-- /view-my-fees -->
+
+    <!-- ══ VIEW: RESULT SLIP ══ -->
+    <div id="view-my-results-full" class="view-section">
+    <div style="padding:28px;">
+        <?php
+        $rs_uid = intval($user_id);
+        $rs_q = mysqli_query($conn, "
+            SELECT cu.id AS unit_id, cu.title AS unit_title, cu.unit_code,
+                   cu.course_id, c.title AS course_title, lec.full_name AS lecturer,
+                   ua.id AS aid, ua.name AS aname, ua.type AS atype,
+                   ua.max_mark AS amax, ua.sort_order AS asort,
+                   um.mark, um.remarks
+            FROM unit_registrations ur
+            INNER JOIN course_units cu ON cu.id = ur.unit_id
+            INNER JOIN courses c       ON c.id  = cu.course_id
+            LEFT  JOIN users lec       ON lec.id = cu.lecturer_id
+            LEFT  JOIN unit_assessments ua ON ua.unit_id = cu.id
+            LEFT  JOIN unit_marks um       ON um.assessment_id = ua.id AND um.student_id = $rs_uid
+            WHERE ur.student_id = $rs_uid
+            ORDER BY c.title ASC, cu.title ASC, ua.sort_order ASC, ua.id ASC
+        ");
+        $rs_tree = [];
+        if ($rs_q) while ($r = mysqli_fetch_assoc($rs_q)) {
+            $cid=$r['course_id']; $uid2=$r['unit_id'];
+            if (!isset($rs_tree[$cid])) $rs_tree[$cid]=['title'=>$r['course_title'],'units'=>[]];
+            if (!isset($rs_tree[$cid]['units'][$uid2])) $rs_tree[$cid]['units'][$uid2]=['title'=>$r['unit_title'],'code'=>$r['unit_code'],'lec'=>$r['lecturer'],'ass'=>[]];
+            if ($r['aid']) $rs_tree[$cid]['units'][$uid2]['ass'][$r['aid']]=['name'=>$r['aname'],'type'=>$r['atype'],'max'=>(float)$r['amax'],'mark'=>$r['mark']!==null?(float)$r['mark']:null,'remark'=>$r['remarks']];
+        }
+        function _rs_tot($ass){$tm=$tx=0;$h=false;foreach($ass as $a){$tx+=$a['max'];if($a['mark']!==null){$tm+=$a['mark'];$h=true;}}return$tx>0&&$h?['pct'=>round($tm/$tx*100,1),'tm'=>$tm,'tx'=>$tx]:['pct'=>null,'tm'=>0,'tx'=>$tx];}
+        function _rs_grd($pct){if($pct===null)return['—','Pending','#94a3b8','#f1f5f9'];if($pct>=70)return['A','Distinction','#059669','#d1fae5'];if($pct>=60)return['B','Credit','#2563eb','#dbeafe'];if($pct>=50)return['C','Pass','#7c3aed','#ede9fe'];if($pct>=40)return['D','Pass','#d97706','#fef3c7'];return['F','Fail','#dc2626','#fee2e2'];}
+        function _rs_gp($p){if($p===null)return null;if($p>=70)return 4.0;if($p>=60)return 3.0;if($p>=50)return 2.0;if($p>=40)return 1.0;return 0.0;}
+        $all_pcts=[];
+        foreach($rs_tree as $cd) foreach($cd['units'] as $ud){$t=_rs_tot($ud['ass']);if($t['pct']!==null)$all_pcts[]=$t['pct'];}
+        $rs_avg=count($all_pcts)>0?round(array_sum($all_pcts)/count($all_pcts),1):null;
+        $rs_gps=array_filter(array_map('_rs_gp',$all_pcts),fn($v)=>$v!==null);
+        $rs_gpa=count($rs_gps)>0?round(array_sum($rs_gps)/count($rs_gps),2):null;
+        $rs_total_u=array_sum(array_map(fn($c)=>count($c['units']),$rs_tree));
+        $rs_graded_u=count($all_pcts);
+        [$rs_ov_g,$rs_ov_c,$rs_ov_col,$rs_ov_bg]=_rs_grd($rs_avg);
+        ?>
+        <!-- Download banner -->
+        <div style="background:linear-gradient(135deg,#1e1b4b,#312e81);border-radius:16px;padding:22px 26px;margin-bottom:22px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;">
+            <div>
+                <div style="font-size:20px;font-weight:900;color:#fff;">📄 My Academic Result Slip</div>
+                <div style="font-size:12px;color:rgba(255,255,255,.5);margin-top:4px;">Unit results with full assessment breakdown</div>
+            </div>
+            <a href="result_slip.php" target="_blank" style="display:inline-flex;align-items:center;gap:8px;background:#6366f1;color:#fff;padding:12px 24px;border-radius:10px;font-size:13px;font-weight:800;text-decoration:none;">
+                <i class="fa-solid fa-download"></i> Download / Print PDF
+            </a>
+        </div>
+        <?php if ($rs_graded_u > 0): ?>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-bottom:22px;">
+            <?php foreach([['GPA',number_format($rs_gpa,2),'Out of 4.00','#6366f1','#ede9fe'],['Average',$rs_avg.'%','All graded',$rs_ov_col,$rs_ov_bg],['Grade',$rs_ov_g,$rs_ov_c,$rs_ov_col,$rs_ov_bg],['Graded',"$rs_graded_u/$rs_total_u",'Units','#0ea5e9','#e0f2fe']] as [$l,$v,$s,$c,$b]): ?>
+            <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;box-shadow:0 1px 3px rgba(0,0,0,.04);">
+                <div style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:#94a3b8;margin-bottom:5px;"><?php echo $l; ?></div>
+                <div style="font-size:22px;font-weight:900;color:<?php echo $c; ?>;font-family:monospace;"><?php echo $v; ?></div>
+                <div style="font-size:10px;color:#94a3b8;margin-top:3px;"><?php echo $s; ?></div>
+            </div>
+            <?php endforeach; ?>
+        </div>
+        <?php endif; ?>
+        <?php if(empty($rs_tree)): ?>
+        <div style="background:#fff;border:2px dashed #e2e8f0;border-radius:14px;padding:60px;text-align:center;color:#94a3b8;">
+            <i class="fa-solid fa-clipboard-list" style="font-size:40px;margin-bottom:14px;opacity:.3;display:block;"></i>
+            <div style="font-size:15px;font-weight:700;color:#475569;">No enrolled units found</div>
+        </div>
+        <?php else: ?>
+        <?php foreach($rs_tree as $cid=>$course):
+            $c_pcts=[];foreach($course['units'] as $ud){$t=_rs_tot($ud['ass']);if($t['pct']!==null)$c_pcts[]=$t['pct'];}
+            $c_avg=count($c_pcts)>0?round(array_sum($c_pcts)/count($c_pcts),1):null;
+            [$c_g,$c_c,$c_col,$c_bg]=_rs_grd($c_avg);
+        ?>
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:16px;overflow:hidden;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,.05);">
+            <div style="background:linear-gradient(135deg,#f8fafc,#f1f5f9);padding:14px 22px;border-bottom:2px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+                <div>
+                    <div style="font-size:16px;font-weight:900;color:#0f172a;">📘 <?php echo htmlspecialchars($course['title']); ?></div>
+                    <div style="font-size:11px;color:#64748b;margin-top:2px;"><?php echo count($course['units']); ?> unit<?php echo count($course['units'])!=1?'s':''; ?></div>
+                </div>
+                <?php if($c_avg!==null): ?>
+                <div style="display:flex;align-items:center;gap:12px;">
+                    <div style="width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:900;background:<?php echo $c_bg; ?>;color:<?php echo $c_col; ?>;border:2px solid <?php echo $c_col; ?>;"><?php echo $c_g; ?></div>
+                    <div><div style="font-size:20px;font-weight:900;color:<?php echo $c_col; ?>;font-family:monospace;"><?php echo $c_avg; ?>%</div><div style="font-size:10px;color:#94a3b8;"><?php echo $c_c; ?></div></div>
+                </div>
+                <?php endif; ?>
+            </div>
+            <?php foreach($course['units'] as $uid3=>$unit):
+                $ut=_rs_tot($unit['ass']);[$u_g,$u_c,$u_col,$u_bg]=_rs_grd($ut['pct']);
+                $bar_c=$ut['pct']===null?'#e2e8f0':($ut['pct']>=70?'#10b981':($ut['pct']>=50?'#6366f1':($ut['pct']>=40?'#f59e0b':'#ef4444')));
+            ?>
+            <div style="padding:16px 22px;border-bottom:1px solid #f8fafc;">
+                <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+                    <div>
+                        <?php if($unit['code']): ?><span style="font-family:monospace;font-size:10px;font-weight:700;color:#1d4ed8;background:#eff6ff;border:1px solid #bfdbfe;padding:2px 7px;border-radius:4px;margin-right:6px;"><?php echo htmlspecialchars($unit['code']); ?></span><?php endif; ?>
+                        <span style="font-size:14px;font-weight:800;color:#1e293b;"><?php echo htmlspecialchars($unit['title']); ?></span>
+                        <?php if($unit['lec']): ?><span style="font-size:10px;color:#94a3b8;margin-left:6px;">· <?php echo htmlspecialchars($unit['lec']); ?></span><?php endif; ?>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <div style="width:38px;height:38px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:900;background:<?php echo $u_bg; ?>;color:<?php echo $u_col; ?>;border:2px solid <?php echo $u_col; ?>33;"><?php echo $u_g; ?></div>
+                        <div style="text-align:right;">
+                            <div style="font-size:16px;font-weight:900;color:<?php echo $u_col; ?>;font-family:monospace;"><?php echo $ut['pct']!==null?$ut['pct'].'%':'Pending'; ?></div>
+                            <div style="font-size:10px;color:#94a3b8;"><?php echo $ut['pct']!==null?number_format($ut['tm'],1).' / '.number_format($ut['tx'],1).' marks':'No marks'; ?></div>
+                        </div>
+                    </div>
+                </div>
+                <?php if($ut['pct']!==null): ?>
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+                    <div style="flex:1;height:7px;background:#f1f5f9;border-radius:4px;overflow:hidden;">
+                        <div style="width:<?php echo min(100,$ut['pct']); ?>%;height:100%;background:<?php echo $bar_c; ?>;border-radius:4px;"></div>
+                    </div>
+                    <span style="font-size:11px;font-weight:700;color:<?php echo $u_col; ?>;min-width:36px;"><?php echo $ut['pct']; ?>%</span>
+                </div>
+                <?php endif; ?>
+                <?php if(!empty($unit['ass'])): ?>
+                <div style="display:flex;flex-wrap:wrap;gap:8px;">
+                    <?php foreach($unit['ass'] as $a):
+                        $is_e=$a['type']==='exam';$ac=$is_e?'#dc2626':'#6366f1';$abg=$is_e?'#fef2f2':'#ede9fe';
+                        $ap=($a['max']>0&&$a['mark']!==null)?round($a['mark']/$a['max']*100,1):null;
+                    ?>
+                    <div style="background:<?php echo $abg; ?>;border-radius:9px;padding:9px 12px;min-width:105px;border:1px solid <?php echo $ac; ?>22;">
+                        <div style="font-size:9px;font-weight:800;color:<?php echo $ac; ?>;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;"><?php echo $is_e?'📝 Exam':'📚 C/W'; ?></div>
+                        <div style="font-size:11px;font-weight:700;color:#475569;margin-bottom:4px;"><?php echo htmlspecialchars(ucwords($a['name'])); ?></div>
+                        <div style="font-size:16px;font-weight:900;font-family:monospace;color:<?php echo $a['mark']!==null?$ac:'#cbd5e1'; ?>;">
+                            <?php echo $a['mark']!==null?number_format($a['mark'],1):'—'; ?><span style="font-size:10px;font-weight:500;color:#94a3b8;"> / <?php echo number_format($a['max'],1); ?></span>
+                        </div>
+                        <?php if($ap!==null): ?><div style="font-size:10px;font-weight:700;color:<?php echo $ac; ?>;margin-top:2px;"><?php echo $ap; ?>%</div><?php endif; ?>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+                <?php else: ?><div style="font-size:12px;color:#94a3b8;font-style:italic;">No assessments yet.</div><?php endif; ?>
+            </div>
+            <?php endforeach; ?>
+        </div>
+        <?php endforeach; ?>
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:14px 20px;">
+            <div style="font-size:9px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.1em;margin-bottom:9px;">Grading Scale</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <?php foreach([['A','70–100%','Distinction','#059669','#ecfdf5'],['B','60–69%','Credit','#2563eb','#eff6ff'],['C','50–59%','Pass','#7c3aed','#f5f3ff'],['D','40–49%','Pass','#d97706','#fffbeb'],['F','0–39%','Fail','#dc2626','#fef2f2']] as [$gl,$gr,$gn,$gc,$gbg]): ?>
+                <div style="display:flex;align-items:center;gap:6px;padding:5px 10px;background:<?php echo $gbg; ?>;border-radius:8px;">
+                    <span style="font-size:14px;font-weight:900;color:<?php echo $gc; ?>;font-family:monospace;"><?php echo $gl; ?></span>
+                    <div><div style="font-size:10px;font-weight:700;color:<?php echo $gc; ?>;"><?php echo $gr; ?></div><div style="font-size:9px;color:#64748b;"><?php echo $gn; ?></div></div>
+                </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+        <?php endif; ?>
+    </div>
+    </div><!-- /view-my-results-full -->
+
+    <!-- ══ VIEW: BOARDING ══ -->
+    <div id="view-my-boarding" class="view-section">
+    <div style="padding:28px;">
+        <?php
+        $b_uid = intval($user_id);
+        $b_q = mysqli_query($conn,
+            "SELECT ba.*, d.name AS dorm_name, d.gender AS dorm_gender, d.capacity AS dorm_cap, bm.full_name AS bm_name
+             FROM boarding_allocations ba
+             JOIN boarding_dorms d ON d.id = ba.dorm_id
+             LEFT JOIN users bm ON bm.id = ba.allocated_by
+             WHERE ba.student_id = $b_uid
+             ORDER BY CASE ba.status WHEN 'active' THEN 1 WHEN 'pending' THEN 2 ELSE 3 END ASC, ba.created_at DESC
+             LIMIT 1");
+        $b_alloc = $b_q ? mysqli_fetch_assoc($b_q) : null;
+        $b_notices_q = mysqli_query($conn, "SELECT bn.*, u.full_name AS poster FROM boarding_notices bn LEFT JOIN users u ON u.id=bn.posted_by WHERE bn.is_active=1 ORDER BY bn.created_at DESC LIMIT 10");
+        $b_notices = [];
+        if ($b_notices_q) while ($n = mysqli_fetch_assoc($b_notices_q)) $b_notices[] = $n;
+        $b_hist_q = mysqli_query($conn, "SELECT ba.*, d.name AS dorm_name FROM boarding_allocations ba JOIN boarding_dorms d ON d.id=ba.dorm_id WHERE ba.student_id=$b_uid ORDER BY ba.created_at DESC");
+        $b_hist = [];
+        if ($b_hist_q) while ($h = mysqli_fetch_assoc($b_hist_q)) $b_hist[] = $h;
+        ?>
+        <div style="background:linear-gradient(135deg,#0f172a,#1e3a5f);border-radius:16px;padding:24px 28px;margin-bottom:22px;">
+            <div style="font-size:22px;font-weight:900;color:#fff;margin-bottom:4px;">🏠 My Boarding Details</div>
+            <div style="font-size:12px;color:rgba(255,255,255,.45);">Dormitory allocation and housing information</div>
+        </div>
+        <?php if ($b_alloc && $b_alloc['status'] === 'active'): ?>
+        <div style="background:#fff;border:2px solid #10b981;border-radius:16px;padding:24px;margin-bottom:16px;box-shadow:0 4px 16px rgba(16,185,129,.1);">
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px;">
+                <div style="display:flex;align-items:center;gap:14px;">
+                    <div style="width:54px;height:54px;background:linear-gradient(135deg,#10b981,#34d399);border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:26px;">🏠</div>
+                    <div>
+                        <div style="font-size:22px;font-weight:900;color:#1e293b;"><?php echo htmlspecialchars($b_alloc['dorm_name']); ?></div>
+                        <span style="background:<?php echo $b_alloc['dorm_gender']==='female'?'#fce7f3':'#dbeafe'; ?>;color:<?php echo $b_alloc['dorm_gender']==='female'?'#9d174d':'#1d4ed8'; ?>;font-size:11px;font-weight:700;padding:2px 10px;border-radius:10px;"><?php echo $b_alloc['dorm_gender']==='female'?'🌸 Ladies Dormitory':'🔵 Gents Dormitory'; ?></span>
+                    </div>
+                </div>
+                <span style="background:#d1fae5;color:#065f46;font-size:11px;font-weight:800;padding:6px 16px;border-radius:20px;border:1px solid #a7f3d0;">✅ Active</span>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;">
+                <?php foreach([['🛏 Bed/Room',$b_alloc['bed_number']?:' Not assigned'],['📅 Year',$b_alloc['academic_year']],['📆 Semester',$b_alloc['semester']],['📥 Check-in',$b_alloc['check_in_date']?date('d M Y',strtotime($b_alloc['check_in_date'])):'TBD'],['👤 Allocated By',$b_alloc['bm_name']?:'Boarding Master'],['🏠 Capacity',$b_alloc['dorm_cap'].' beds']] as [$lbl,$val]): ?>
+                <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;">
+                    <div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.07em;margin-bottom:4px;"><?php echo $lbl; ?></div>
+                    <div style="font-size:13px;font-weight:800;color:#1e293b;"><?php echo htmlspecialchars($val); ?></div>
+                </div>
+                <?php endforeach; ?>
+            </div>
+            <?php if(!empty($b_alloc['notes'])): ?><div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:12px 16px;margin-top:14px;font-size:12px;color:#78350f;"><?php echo nl2br(htmlspecialchars($b_alloc['notes'])); ?></div><?php endif; ?>
+        </div>
+        <?php elseif ($b_alloc): ?>
+        <div style="background:#fff;border:1px solid #fde68a;border-radius:14px;padding:24px;margin-bottom:16px;">
+            <div style="font-size:16px;font-weight:800;color:#92400e;margin-bottom:6px;">📦 Previous: <?php echo htmlspecialchars($b_alloc['dorm_name']); ?> — <?php echo ucfirst($b_alloc['status']); ?></div>
+            <p style="font-size:13px;color:#64748b;">Contact the Boarding Master for a new allocation.</p>
+        </div>
+        <?php else: ?>
+        <div style="background:#fff;border:2px dashed #cbd5e1;border-radius:16px;padding:60px;text-align:center;margin-bottom:16px;">
+            <div style="font-size:52px;margin-bottom:16px;">🏠</div>
+            <div style="font-size:17px;font-weight:800;color:#1e293b;margin-bottom:8px;">No Boarding Allocation Yet</div>
+            <div style="font-size:13px;color:#64748b;max-width:400px;margin:0 auto;">Contact the Boarding Master's office or Student Affairs to request accommodation.</div>
+        </div>
+        <?php endif; ?>
+        <?php if(!empty($b_notices)): ?>
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:20px;margin-bottom:16px;">
+            <div style="font-size:14px;font-weight:800;color:#1e293b;margin-bottom:14px;">📣 Boarding Notices</div>
+            <?php foreach($b_notices as $n): $nc=$n['priority']==='urgent'?'#fef2f2':($n['priority']==='info'?'#eff6ff':'#fffbeb');$nb=$n['priority']==='urgent'?'#fecaca':($n['priority']==='info'?'#bfdbfe':'#fde68a');$ntc=$n['priority']==='urgent'?'#dc2626':($n['priority']==='info'?'#2563eb':'#f59e0b'); ?>
+            <div style="background:<?php echo $nc; ?>;border:1px solid <?php echo $nb; ?>;border-radius:10px;padding:14px 16px;margin-bottom:10px;">
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px;">
+                    <div style="font-size:13px;font-weight:800;color:#1e293b;"><?php echo htmlspecialchars($n['title']); ?></div>
+                    <span style="font-size:9px;font-weight:800;color:<?php echo $ntc; ?>;text-transform:uppercase;white-space:nowrap;"><?php echo $n['priority']; ?></span>
+                </div>
+                <div style="font-size:12px;color:#475569;line-height:1.6;"><?php echo nl2br(htmlspecialchars($n['message'])); ?></div>
+                <div style="font-size:10px;color:#94a3b8;margin-top:8px;">By <?php echo htmlspecialchars($n['poster']??'Boarding Master'); ?> · <?php echo date('d M Y H:i',strtotime($n['created_at'])); ?></div>
+            </div>
+            <?php endforeach; ?>
+        </div>
+        <?php endif; ?>
+        <?php if(count($b_hist)>1): ?>
+        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:20px;">
+            <div style="font-size:14px;font-weight:800;color:#1e293b;margin-bottom:14px;">📋 Allocation History</div>
+            <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;min-width:400px;">
+                <thead><tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;">
+                    <?php foreach(['Dorm','Period','Check-in','Status'] as $h): ?><th style="padding:8px 12px;text-align:left;font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;"><?php echo $h; ?></th><?php endforeach; ?>
+                </tr></thead>
+                <tbody>
+                <?php foreach($b_hist as $bh): $sc=['active'=>['#d1fae5','#065f46'],'vacated'=>['#f1f5f9','#475569'],'transferred'=>['#ede9fe','#5b21b6'],'pending'=>['#fef3c7','#92400e']];[$sbg,$stc]=$sc[$bh['status']]??['#f1f5f9','#475569']; ?>
+                <tr style="border-bottom:1px solid #f8fafc;">
+                    <td style="padding:10px 12px;font-size:13px;font-weight:700;"><?php echo htmlspecialchars($bh['dorm_name']); ?></td>
+                    <td style="padding:10px 12px;font-size:11px;color:#64748b;"><?php echo htmlspecialchars($bh['academic_year']); ?> · <?php echo htmlspecialchars($bh['semester']); ?></td>
+                    <td style="padding:10px 12px;font-size:11px;"><?php echo $bh['check_in_date']?date('d M Y',strtotime($bh['check_in_date'])):'—'; ?></td>
+                    <td style="padding:10px 12px;"><span style="font-size:10px;font-weight:700;background:<?php echo $sbg; ?>;color:<?php echo $stc; ?>;padding:2px 9px;border-radius:10px;"><?php echo ucfirst($bh['status']); ?></span></td>
+                </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table></div>
+        </div>
+        <?php endif; ?>
+    </div><!-- /padding-wrapper -->
+    </div><!-- /view-my-boarding -->
+
+    </main><!-- /main content -->
     <div id="chatbot-container">
         <div id="chatbot-window">
             <div id="chatbot-header">
@@ -2022,9 +2296,11 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
     <script>
         // ── Navigation ──
         function toggleDropdown() {
-            document.getElementById('course-dropdown').classList.toggle('dropdown-active');
-            document.getElementById('drop-icon').style.transform =
-                document.getElementById('course-dropdown').classList.contains('dropdown-active') ? 'rotate(180deg)' : 'rotate(0)';
+            var dd = document.getElementById('course-dropdown');
+            var ic = document.getElementById('drop-icon');
+            if (!dd) return;
+            dd.classList.toggle('dropdown-active');
+            if (ic) ic.style.transform = dd.classList.contains('dropdown-active') ? 'rotate(180deg)' : 'rotate(0deg)';
         }
 
         function switchView(viewId) {
@@ -2038,21 +2314,46 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
                 targetView = document.getElementById('view-overview');
             }
             targetView.classList.add('active');
+
+            // Hide course-viewing-bar for views that don't need it
+            const noBarViews = ['my-results-full', 'my-boarding', 'my-fees'];
+            const viewingBar = document.getElementById('course-viewing-bar');
+            if (viewingBar) {
+                viewingBar.style.display = noBarViews.includes(viewId) ? 'none' : '';
+            }
             
             // Remove active state from all sidebar items
             document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('sidebar-active'));
             
             // Add active state to selected sidebar item
+
             const navIds = ['overview', 'schedule', 'assignments', 'my-units', 'my-results', 'my-attendance', 'my-fees'];
+
+            const navIds = ['overview', 'schedule', 'assignments', 'my-units', 'my-results', 'my-attendance', 'my-fees', 'my-results-full', 'my-boarding'];
+
             if (navIds.includes(viewId)) {
                 const navEl = document.getElementById('nav-' + viewId);
                 if (navEl) navEl.classList.add('sidebar-active');
             }
             
+
             // Update Page title
             const titleEl = document.getElementById('page-title');
             if (titleEl) {
                 titleEl.innerText = viewId.replace(/-/g, ' ').toUpperCase();
+
+            // Update page title
+            const titleEl = document.getElementById('page-title');
+            if (titleEl) {
+                const titles = {
+                    'overview': 'OVERVIEW', 'schedule': 'SCHEDULE',
+                    'assignments': 'ASSIGNMENTS', 'my-units': 'MY UNITS',
+                    'my-results': 'MY RESULTS', 'my-attendance': 'ATTENDANCE',
+                    'my-fees': 'FEES & PAYMENTS', 'my-results-full': 'RESULT SLIP',
+                    'my-boarding': 'MY BOARDING'
+                };
+                titleEl.innerText = titles[viewId] || viewId.replace(/-/g, ' ').toUpperCase();
+
             }
 
             // Save state to local storage so page reloads don't reset to overview

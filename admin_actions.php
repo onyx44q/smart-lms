@@ -6,6 +6,30 @@ checkRole('admin');
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $action = $_POST['action_type'];
 
+    // ── Set Admission Number ──────────────────────────────────────────
+    if ($action === 'set_admission_number') {
+        $uid    = intval($_POST['user_id']);
+        $adm_no = mysqli_real_escape_string($conn, trim($_POST['admission_number'] ?? ''));
+
+        // Ensure column exists
+        @mysqli_query($conn, "ALTER TABLE users ADD COLUMN `admission_number` VARCHAR(30) DEFAULT NULL AFTER `email`");
+        @mysqli_query($conn, "ALTER TABLE users ADD UNIQUE KEY `uq_admission_number` (`admission_number`)");
+
+        if ($adm_no === '') {
+            // Clear the admission number
+            mysqli_query($conn, "UPDATE users SET admission_number=NULL WHERE id=$uid");
+            header("Location: admin_dashboard.php?view=users&status=adm_cleared"); exit();
+        } else {
+            // Check not taken by another student
+            $exists = mysqli_fetch_assoc(mysqli_query($conn, "SELECT id FROM users WHERE admission_number='$adm_no' AND id != $uid LIMIT 1"));
+            if ($exists) {
+                header("Location: admin_dashboard.php?view=users&status=adm_taken"); exit();
+            }
+            mysqli_query($conn, "UPDATE users SET admission_number='$adm_no' WHERE id=$uid");
+            header("Location: admin_dashboard.php?view=users&status=adm_set"); exit();
+        }
+    }
+
     if ($action === 'add_course') {
         $title = mysqli_real_escape_string($conn, $_POST['title']);
         mysqli_query($conn, "INSERT INTO courses (title) VALUES ('$title')");

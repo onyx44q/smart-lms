@@ -510,23 +510,65 @@ $filter = $_GET['filter'] ?? 'all';
         <?php endif; /* end view==courses */ ?>
 
         <?php if ($view == 'users'): ?>
+        <?php
+        // Show admission number status messages
+        $adm_status = $_GET['status'] ?? '';
+        $adm_msgs = [
+            'adm_set'     => ['✅ Admission number assigned successfully! Student can now login with it.', 'bg-emerald-50 border-emerald-200 text-emerald-800'],
+            'adm_cleared' => ['🗑 Admission number cleared.', 'bg-slate-50 border-slate-200 text-slate-700'],
+            'adm_taken'   => ['❌ That admission number is already assigned to another student.', 'bg-red-50 border-red-200 text-red-700'],
+            'added'       => ['✅ User added successfully.', 'bg-emerald-50 border-emerald-200 text-emerald-800'],
+            'deleted'     => ['🗑 User deleted.', 'bg-slate-50 border-slate-200 text-slate-700'],
+            'error'       => ['❌ Something went wrong. Please try again.', 'bg-red-50 border-red-200 text-red-700'],
+        ];
+        if (isset($adm_msgs[$adm_status])):
+            [$adm_msg_text, $adm_msg_class] = $adm_msgs[$adm_status];
+        ?>
+        <div id="adm-toast" class="mb-6 border rounded-2xl px-5 py-4 font-bold text-sm flex items-center justify-between <?php echo $adm_msg_class; ?>">
+            <span><?php echo $adm_msg_text; ?></span>
+            <button onclick="document.getElementById('adm-toast').remove()" class="ml-4 opacity-50 hover:opacity-100 text-lg leading-none">&times;</button>
+        </div>
+        <script>setTimeout(() => { const t = document.getElementById('adm-toast'); if(t){ t.style.transition='opacity .5s'; t.style.opacity='0'; setTimeout(()=>t.remove(),500); } }, 4000);</script>
+        <?php endif; ?>
         <div class="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm">
             <table class="w-full text-left">
                 <thead>
                     <tr class="text-[10px] font-black uppercase text-slate-400 border-b border-slate-50">
                         <th class="pb-4">Full Name</th>
                         <th class="pb-4">Email</th>
+                        <th class="pb-4">Admission No. <span style="color:#6366f1;">(Students)</span></th>
                         <th class="pb-4">Role</th>
                         <th class="pb-4 text-center">Actions</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-50">
                     <?php
+                    // Ensure admission_number column exists
+                    @mysqli_query($conn, "ALTER TABLE users ADD COLUMN `admission_number` VARCHAR(30) DEFAULT NULL AFTER `email`");
+                    @mysqli_query($conn, "ALTER TABLE users ADD UNIQUE KEY `uq_admission_number` (`admission_number`)");
+
                     $users = mysqli_query($conn, "SELECT * FROM users WHERE role != 'admin' ORDER BY id DESC");
                     while($u = mysqli_fetch_assoc($users)): ?>
                     <tr>
                         <td class="py-4 font-bold text-slate-700"><?php echo $u['full_name']; ?></td>
                         <td class="py-4 text-sm text-slate-500"><?php echo $u['email']; ?></td>
+                        <td class="py-3">
+                            <?php if ($u['role'] === 'student'): ?>
+                            <form method="POST" action="admin_actions.php" style="display:flex;gap:5px;align-items:center;">
+                                <input type="hidden" name="action_type" value="set_admission_number">
+                                <input type="hidden" name="user_id" value="<?php echo $u['id']; ?>">
+                                <input type="text" name="admission_number"
+                                    value="<?php echo htmlspecialchars($u['admission_number'] ?? ''); ?>"
+                                    placeholder="e.g. ADM-2024-001"
+                                    style="width:130px;padding:5px 8px;font-size:11px;border:1px solid #e2e8f0;border-radius:7px;font-family:monospace;font-weight:700;color:#6366f1;outline:none;"
+                                    onfocus="this.style.borderColor='#6366f1'"
+                                    onblur="this.style.borderColor='#e2e8f0'">
+                                <button type="submit" style="padding:5px 9px;background:#6366f1;color:#fff;border:none;border-radius:6px;font-size:10px;font-weight:800;cursor:pointer;">Set</button>
+                            </form>
+                            <?php else: ?>
+                            <span class="px-3 py-1 rounded-full text-[9px] font-black uppercase bg-slate-100 text-slate-500"><?php echo $u['role']; ?></span>
+                            <?php endif; ?>
+                        </td>
                         <td class="py-4">
                             <span class="px-3 py-1 rounded-full text-[9px] font-black uppercase bg-slate-100 text-slate-500"><?php echo $u['role']; ?></span>
                         </td>
