@@ -9,6 +9,14 @@ if (!isset($_SESSION['user_name'])) {
     exit();
 }
 
+// ── STRICT ROLE LOCK: only students may view this page ───────────────
+if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'student') {
+    session_unset();
+    session_destroy();
+    header("Location: index.php?error=unauthorized");
+    exit();
+}
+
 $user_id = $_SESSION['user_id'] ?? 0;
 
 // --- ENROLLMENT & UNENROLLMENT LOGIC ---
@@ -57,6 +65,92 @@ if (isset($_POST['unenroll_course'])) {
     }
 }
 
+// --- MY DETAILS: profile update ---
+if (isset($_POST['update_profile'])) {
+    $phone           = mysqli_real_escape_string($conn, trim($_POST['phone'] ?? ''));
+    $dob             = trim($_POST['date_of_birth'] ?? '');
+    $dob_sql         = $dob ? "'" . mysqli_real_escape_string($conn, $dob) . "'" : 'NULL';
+    $previous_school = mysqli_real_escape_string($conn, trim($_POST['previous_school'] ?? ''));
+    $religion        = mysqli_real_escape_string($conn, trim($_POST['religion'] ?? ''));
+    $address         = mysqli_real_escape_string($conn, trim($_POST['address'] ?? ''));
+
+    mysqli_query($conn, "UPDATE users SET
+        phone='$phone', date_of_birth=$dob_sql, previous_school='$previous_school',
+        religion='$religion', address='$address'
+        WHERE id=$user_id");
+
+    header("Location: student_dashboard.php?view=my-details&status=success&msg=Profile Updated");
+    exit();
+}
+
+// --- APPLY FOR REFUND ---
+if (isset($_POST['submit_refund'])) {
+    $refund_amount = floatval($_POST['refund_amount'] ?? 0);
+    $refund_reason = mysqli_real_escape_string($conn, trim($_POST['refund_reason'] ?? ''));
+    $bank_details  = mysqli_real_escape_string($conn, trim($_POST['bank_details'] ?? ''));
+
+    if ($refund_amount > 0 && $refund_reason) {
+        mysqli_query($conn, "INSERT INTO refund_requests (student_id, amount, reason, bank_details)
+            VALUES ($user_id, $refund_amount, '$refund_reason', '$bank_details')");
+        header("Location: student_dashboard.php?view=my-refunds&status=success&msg=Refund Request Submitted");
+    } else {
+        header("Location: student_dashboard.php?view=my-refunds&status=error&msg=Please fill in all required fields");
+    }
+    exit();
+}
+
+// --- REGISTER FOR GRADUATION (now scoped to a specific course) ---
+if (isset($_POST['submit_graduation'])) {
+    $ceremony  = mysqli_real_escape_string($conn, trim($_POST['intended_ceremony'] ?? ''));
+    $gown_size = mysqli_real_escape_string($conn, trim($_POST['gown_size'] ?? ''));
+    $grad_course_id = intval($_POST['course_id'] ?? 0);
+
+    // Verify the student is actually enrolled in the course they're claiming to graduate from
+    $is_enrolled = $grad_course_id && mysqli_fetch_assoc(mysqli_query($conn,
+        "SELECT id FROM enrollments WHERE student_id=$user_id AND course_id=$grad_course_id LIMIT 1"));
+
+    // Server-side eligibility re-check, SCOPED TO THIS ONE COURSE (never trust the
+    // client-side gate alone): fees fully cleared + every unit of THIS course 'passed'.
+    $gf_total_fees = floatval(mysqli_fetch_assoc(mysqli_query($conn,
+        "SELECT COALESCE(SUM(net_amount),0) t FROM student_fee_assignments WHERE student_id=$user_id AND status != 'waived'"))['t']);
+    $gf_total_paid = floatval(mysqli_fetch_assoc(mysqli_query($conn,
+        "SELECT COALESCE(SUM(amount_paid),0) t FROM fee_payments WHERE student_id=$user_id"))['t']);
+    $gf_fees_clear = $gf_total_paid >= $gf_total_fees;
+
+    $gf_all_passed = false;
+    if ($is_enrolled) {
+        $gf_all_passed = true;
+        $gf_units = mysqli_query($conn, "SELECT id FROM course_units WHERE course_id=$grad_course_id");
+        $gf_has_units = false;
+        while ($gfu = mysqli_fetch_assoc($gf_units)) {
+            $gf_has_units = true;
+            if (!unit_is_passed($conn, $user_id, intval($gfu['id']))) { $gf_all_passed = false; break; }
+        }
+        if (!$gf_has_units) $gf_all_passed = false;
+    }
+    $server_side_eligible = $is_enrolled && $gf_fees_clear && $gf_all_passed;
+
+    if (!$server_side_eligible) {
+        header("Location: student_dashboard.php?view=my-graduation&status=error&msg=You do not yet meet the requirements to register for graduation in that course");
+        exit();
+    }
+
+    if ($ceremony) {
+        $existing = mysqli_fetch_assoc(mysqli_query($conn,
+            "SELECT id FROM graduation_registrations WHERE student_id=$user_id AND course_id=$grad_course_id AND status IN ('pending','approved') LIMIT 1"));
+        if (!$existing) {
+            mysqli_query($conn, "INSERT INTO graduation_registrations (student_id, course_id, intended_ceremony, gown_size)
+                VALUES ($user_id, $grad_course_id, '$ceremony', '$gown_size')");
+            header("Location: student_dashboard.php?view=my-graduation&status=success&msg=Graduation Registration Submitted");
+        } else {
+            header("Location: student_dashboard.php?view=my-graduation&status=error&msg=You already have a pending or approved registration for that course");
+        }
+    } else {
+        header("Location: student_dashboard.php?view=my-graduation&status=error&msg=Please select a ceremony");
+    }
+    exit();
+}
+
 // --- DATA FETCHING ---
 $enrolled_query = mysqli_query($conn, "SELECT courses.* FROM courses 
     JOIN enrollments ON courses.id = enrollments.course_id 
@@ -67,7 +161,95 @@ $available_query = mysqli_query($conn, "SELECT * FROM courses WHERE id NOT IN
 
 $enrolledCount = mysqli_num_rows($enrolled_query);
 
-// Build enrolled course list + course objects for tab switcher
+// ── My Details: full profile row ──────────────────────────────────────
+$my_profile = mysqli_fetch_assoc(mysqli_query($conn,
+    "SELECT u.*, c.title AS course_name FROM users u
+     LEFT JOIN courses c ON c.id = u.course_id
+     WHERE u.id = $user_id LIMIT 1"));
+
+// ── My Refund Requests ──────────────────────────────────────────────
+$my_refunds = [];
+$rf_res = mysqli_query($conn, "SELECT * FROM refund_requests WHERE student_id=$user_id ORDER BY created_at DESC");
+if ($rf_res) while ($r = mysqli_fetch_assoc($rf_res)) $my_refunds[] = $r;
+
+// ── My Graduation Registrations ─────────────────────────────────────
+$my_graduations = [];
+$gr_res = mysqli_query($conn, "
+    SELECT gr.*, c.title AS course_title FROM graduation_registrations gr
+    LEFT JOIN courses c ON c.id = gr.course_id
+    WHERE gr.student_id=$user_id ORDER BY gr.created_at DESC
+");
+if ($gr_res) while ($r = mysqli_fetch_assoc($gr_res)) $my_graduations[] = $r;
+
+// ── Exam eligibility summary (for sidebar badge / quick glance) ────────
+$barred_units_count = 0;
+$elig_res = mysqli_query($conn, "SELECT exam_status FROM v_student_attendance WHERE student_id=$user_id");
+if ($elig_res) while ($er = mysqli_fetch_assoc($elig_res)) { if ($er['exam_status'] === 'BARRED') $barred_units_count++; }
+
+// ── Completion status per enrolled course (student-visible) ────────────
+// Computed LIVE from unit_registrations, same source of truth as the
+// Graduation page — no more stale "Check" button / cached snapshot.
+$my_completions = [];
+mysqli_data_seek($enrolled_query, 0);
+while ($ecrow = mysqli_fetch_assoc($enrolled_query)) {
+    $units_res_c = mysqli_query($conn, "SELECT id FROM course_units WHERE course_id={$ecrow['id']}");
+    $total_units = 0; $passed_units = 0;
+    while ($uc = mysqli_fetch_assoc($units_res_c)) {
+        $total_units++;
+        if (unit_is_passed($conn, $user_id, intval($uc['id']))) $passed_units++;
+    }
+    $my_completions[] = [
+        'course_id'    => $ecrow['id'], 'title' => $ecrow['title'],
+        'total_units'  => $total_units, 'passed_units' => $passed_units,
+        'status'       => $total_units === 0 ? null : ($passed_units === $total_units ? 'complete' : 'incomplete'),
+    ];
+}
+mysqli_data_seek($enrolled_query, 0);
+
+// ── My current Semester / Year per course — computed LIVE from unit
+//    registrations (never a stored field), so it moves forward the moment
+//    a student registers for the next semester's units. ──
+$my_semesters = [];
+mysqli_data_seek($enrolled_query, 0);
+while ($ecrow_sem = mysqli_fetch_assoc($enrolled_query)) {
+    $sem_info = student_current_semester($conn, $user_id, intval($ecrow_sem['id']));
+    if ($sem_info) {
+        $my_semesters[] = [
+            'course_id' => $ecrow_sem['id'],
+            'title'     => $ecrow_sem['title'],
+        ] + $sem_info;
+    }
+}
+mysqli_data_seek($enrolled_query, 0);
+
+// ── Live graduation eligibility — SCOPED PER COURSE, not aggregated ────
+//    Fees must be cleared (system-wide), but "all units passed" is checked
+//    per course so a student isn't blocked from graduating in a completed
+//    course just because a different, unrelated course isn't finished. ──
+$grad_total_fees = floatval(mysqli_fetch_assoc(mysqli_query($conn,
+    "SELECT COALESCE(SUM(net_amount),0) t FROM student_fee_assignments WHERE student_id=$user_id AND status != 'waived'"))['t']);
+$grad_total_paid = floatval(mysqli_fetch_assoc(mysqli_query($conn,
+    "SELECT COALESCE(SUM(amount_paid),0) t FROM fee_payments WHERE student_id=$user_id"))['t']);
+$grad_fees_clear = $grad_total_paid >= $grad_total_fees;
+
+// $grad_course_status[course_id] = ['title'=>, 'complete'=>bool, 'unpassed'=>[titles]]
+$grad_course_status = [];
+mysqli_data_seek($enrolled_query, 0);
+while ($ecrow2 = mysqli_fetch_assoc($enrolled_query)) {
+    $units_res2 = mysqli_query($conn, "SELECT id, title FROM course_units WHERE course_id={$ecrow2['id']}");
+    $unpassed = []; $has_units = false;
+    while ($u2 = mysqli_fetch_assoc($units_res2)) {
+        $has_units = true;
+        if (!unit_is_passed($conn, $user_id, intval($u2['id']))) $unpassed[] = $u2['title'];
+    }
+    $grad_course_status[$ecrow2['id']] = [
+        'title' => $ecrow2['title'],
+        'complete' => $has_units && empty($unpassed) && $grad_fees_clear,
+        'unpassed' => $unpassed,
+        'has_units' => $has_units,
+    ];
+}
+mysqli_data_seek($enrolled_query, 0);
 $enrolled_ids_res = mysqli_query($conn, "SELECT course_id FROM enrollments WHERE student_id = '$user_id'");
 $enrolled_ids = [];
 while ($r = mysqli_fetch_assoc($enrolled_ids_res)) $enrolled_ids[] = intval($r['course_id']);
@@ -157,6 +339,18 @@ if ($view_course_id) {
 
 // Student career path
 $studentInfo = mysqli_fetch_assoc(mysqli_query($conn, "SELECT career_path, admission_number FROM users WHERE id = '$user_id'"));
+
+// ── Fetch student's current class allocation (if any) ────────────────
+$myClass = null;
+$myClassRes = mysqli_query($conn, "
+    SELECT cl.class_code, cl.category, cl.capacity, ca.allocated_at,
+           (SELECT COUNT(*) FROM class_allocations ca2 WHERE ca2.class_id = cl.id AND ca2.status='active') AS classmates_count
+    FROM class_allocations ca
+    JOIN classes cl ON cl.id = ca.class_id
+    WHERE ca.student_id = '$user_id' AND ca.status = 'active'
+    LIMIT 1
+");
+if ($myClassRes) $myClass = mysqli_fetch_assoc($myClassRes);
 $careerPath  = $studentInfo['career_path'] ?? 'General';
 
 // ── Assignments — scoped to the selected course ───────────────────────
@@ -165,7 +359,7 @@ if (!empty($enrolled_ids)) {
     // Scope to the active course; fall back to all courses only if nothing selected
     $assign_scope = $view_course_id ? "$view_course_id" : implode(',', $enrolled_ids);
     $assign_res = mysqli_query($conn,
-        "SELECT a.id, a.title, a.description, a.due_date, a.max_words,
+        "SELECT a.id, a.course_id, a.title, a.description, a.due_date, a.max_words,
                 c.title AS course_title,
                 s.id AS submission_id, s.word_count, s.submitted_at,
                 pr.overall_score, pr.verdict
@@ -180,6 +374,15 @@ if (!empty($enrolled_ids)) {
     if ($assign_res) {
         while ($aRow = mysqli_fetch_assoc($assign_res)) $assignments_for_student[] = $aRow;
     }
+}
+// Group assignments by course/unit so the UI can show a "pick a unit" grid first
+$assignments_by_course = [];
+foreach ($assignments_for_student as $aItem) {
+    $cid = $aItem['course_id'];
+    if (!isset($assignments_by_course[$cid])) {
+        $assignments_by_course[$cid] = ['title' => $aItem['course_title'], 'items' => []];
+    }
+    $assignments_by_course[$cid]['items'][] = $aItem;
 }
 
 // ── Attendance data for student ──────────────────────────────────────────
@@ -467,6 +670,38 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
         <script>setTimeout(() => { document.getElementById('toast').style.opacity = '0'; setTimeout(() => document.getElementById('toast').remove(), 500); }, 3000);</script>
     <?php endif; ?>
 
+    <?php if (isset($_GET['rid']) && intval($_GET['rid']) > 0 && in_array($_GET['status'] ?? '', ['advance','retry','remedial'])):
+        $rid_fb = intval($_GET['rid']); ?>
+        <div id="rec-feedback-toast" class="fixed top-28 right-6 z-[100] bg-white border border-slate-100 p-5 rounded-3xl shadow-2xl w-80 animate-slide-in">
+            <p class="text-[10px] font-black uppercase text-slate-400 mb-2"><i class="fa-solid fa-brain text-indigo-500 mr-1"></i>AI Recommendation</p>
+            <p id="rec-feedback-question" class="text-xs font-bold text-slate-800 mb-3">Was this recommendation helpful?</p>
+            <div id="rec-feedback-buttons" class="flex gap-2">
+                <button onclick="submitRecFeedback(<?php echo $rid_fb; ?>, 'yes')" class="flex-1 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-black uppercase transition-all">
+                    <i class="fa-solid fa-thumbs-up mr-1"></i>Yes
+                </button>
+                <button onclick="submitRecFeedback(<?php echo $rid_fb; ?>, 'no')" class="flex-1 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-black uppercase transition-all">
+                    <i class="fa-solid fa-thumbs-down mr-1"></i>No
+                </button>
+            </div>
+        </div>
+        <script>
+        function submitRecFeedback(resultId, helpful) {
+            fetch('record_feedback.php', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: 'result_id=' + encodeURIComponent(resultId) + '&helpful=' + encodeURIComponent(helpful)
+            }).finally(() => {
+                document.getElementById('rec-feedback-question').textContent = 'Thanks for your feedback!';
+                document.getElementById('rec-feedback-buttons').innerHTML = '';
+                setTimeout(() => {
+                    const el = document.getElementById('rec-feedback-toast');
+                    if (el) { el.style.opacity = '0'; setTimeout(() => el.remove(), 500); }
+                }, 1800);
+            });
+        }
+        </script>
+    <?php endif; ?>
+
     <aside class="w-64 border-r border-slate-200 hidden md:flex flex-col bg-white sticky top-0 h-screen overflow-hidden">
         <div class="p-8 flex items-center space-x-2 flex-shrink-0">
             <i class="fa-solid fa-brain text-blue-600 text-xl"></i>
@@ -498,6 +733,11 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
                 <span class="text-xs uppercase tracking-wider">My Results</span>
             </a>
 
+            <a href="recommendation_history.php" class="sidebar-item flex items-center space-x-3 p-3 rounded-xl transition-all text-slate-500">
+                <i class="fa-solid fa-clock-rotate-left w-5" style="color:#818cf8;"></i>
+                <span class="text-xs uppercase tracking-wider">Recommendations</span>
+            </a>
+
             <a href="javascript:void(0)" onclick="switchView('my-attendance')" id="nav-my-attendance" class="sidebar-item flex items-center space-x-3 p-3 rounded-xl transition-all text-slate-500">
                 <i class="fa-solid fa-calendar-check w-5"></i>
                 <span class="text-xs uppercase tracking-wider">Attendance</span>
@@ -521,6 +761,47 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
             <a href="javascript:void(0)" onclick="switchView('my-boarding')" id="nav-my-boarding" class="sidebar-item flex items-center space-x-3 p-3 rounded-xl transition-all text-slate-500">
                 <i class="fa-solid fa-bed w-5" style="color:#f59e0b;"></i>
                 <span class="text-xs uppercase tracking-wider">Boarding</span>
+            </a>
+
+            <div style="margin:14px 12px 6px;border-top:1px solid #f1f5f9;padding-top:10px;">
+                <span style="font-size:9px;font-weight:800;color:#cbd5e1;text-transform:uppercase;letter-spacing:.08em;">Academic Records</span>
+            </div>
+
+            <a href="javascript:void(0)" onclick="switchView('my-details')" id="nav-my-details" class="sidebar-item flex items-center space-x-3 p-3 rounded-xl transition-all text-slate-500">
+                <i class="fa-solid fa-id-card w-5" style="color:#3b82f6;"></i>
+                <span class="text-xs uppercase tracking-wider">My Details</span>
+            </a>
+
+            <a href="exam_card.php" target="_blank" class="sidebar-item flex items-center space-x-3 p-3 rounded-xl transition-all text-slate-500">
+                <i class="fa-solid fa-rectangle-list w-5" style="color:#dc2626;"></i>
+                <span class="text-xs uppercase tracking-wider">Exam Card</span>
+                <?php if ($barred_units_count > 0): ?>
+                <span style="margin-left:auto;background:#ef4444;color:#fff;font-size:9px;font-weight:800;padding:2px 7px;border-radius:10px;"><?php echo $barred_units_count; ?></span>
+                <?php endif; ?>
+            </a>
+
+            <a href="progress_report.php" target="_blank" class="sidebar-item flex items-center space-x-3 p-3 rounded-xl transition-all text-slate-500">
+                <i class="fa-solid fa-chart-line w-5" style="color:#0891b2;"></i>
+                <span class="text-xs uppercase tracking-wider">Progress Report</span>
+            </a>
+
+            <div style="margin:14px 12px 6px;border-top:1px solid #f1f5f9;padding-top:10px;">
+                <span style="font-size:9px;font-weight:800;color:#cbd5e1;text-transform:uppercase;letter-spacing:.08em;">Finance &amp; Graduation</span>
+            </div>
+
+            <a href="javascript:void(0)" onclick="switchView('my-refunds')" id="nav-my-refunds" class="sidebar-item flex items-center space-x-3 p-3 rounded-xl transition-all text-slate-500">
+                <i class="fa-solid fa-money-bill-transfer w-5" style="color:#16a34a;"></i>
+                <span class="text-xs uppercase tracking-wider">Apply for Refund</span>
+            </a>
+
+            <a href="completion_report.php" target="_blank" class="sidebar-item flex items-center space-x-3 p-3 rounded-xl transition-all text-slate-500">
+                <i class="fa-solid fa-file-circle-check w-5" style="color:#7c3aed;"></i>
+                <span class="text-xs uppercase tracking-wider">Completion Report</span>
+            </a>
+
+            <a href="javascript:void(0)" onclick="switchView('my-graduation')" id="nav-my-graduation" class="sidebar-item flex items-center space-x-3 p-3 rounded-xl transition-all text-slate-500">
+                <i class="fa-solid fa-graduation-cap w-5" style="color:#c9a84c;"></i>
+                <span class="text-xs uppercase tracking-wider">Register for Graduation</span>
             </a>
 
             <div id="course-dropdown">
@@ -557,6 +838,11 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
                     <p class="text-[10px] text-blue-600 font-bold uppercase tracking-widest">Student Account</p>
                     <?php if (!empty($studentInfo['admission_number'])): ?>
                     <p class="text-[9px] font-black tracking-widest" style="color:#6366f1;font-family:monospace;"><?php echo htmlspecialchars($studentInfo['admission_number']); ?></p>
+                    <?php endif; ?>
+                    <?php if ($myClass): ?>
+                    <p class="text-[9px] font-black tracking-widest mt-0.5" style="color:#059669;">
+                        <i class="fa-solid fa-people-roof mr-1"></i><?php echo htmlspecialchars($myClass['class_code']); ?>
+                    </p>
                     <?php endif; ?>
                 </div>
                 <div class="w-10 h-10 rounded-full bg-gradient-to-tr from-blue-700 to-blue-400 flex items-center justify-center font-bold text-white shadow-xl">
@@ -630,6 +916,111 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
                     </div>
                 </div>
             </div>
+
+            <!-- ── My Class Allocation ── -->
+            <?php
+            $cat_meta = [
+                'Education' => ['icon'=>'fa-graduation-cap', 'grad'=>'from-blue-600 to-indigo-600',   'light'=>'bg-blue-50',   'text'=>'text-blue-700'],
+                'Technical' => ['icon'=>'fa-microchip',      'grad'=>'from-purple-600 to-fuchsia-600', 'light'=>'bg-purple-50', 'text'=>'text-purple-700'],
+                'Business'  => ['icon'=>'fa-briefcase',      'grad'=>'from-amber-500 to-orange-600',   'light'=>'bg-amber-50',  'text'=>'text-amber-700'],
+                'Nursing'   => ['icon'=>'fa-heart-pulse',    'grad'=>'from-rose-500 to-pink-600',      'light'=>'bg-rose-50',   'text'=>'text-rose-700'],
+            ];
+            ?>
+            <?php if ($myClass):
+                $cm = $cat_meta[$myClass['category']] ?? ['icon'=>'fa-people-roof','grad'=>'from-slate-600 to-slate-700','light'=>'bg-slate-50','text'=>'text-slate-700'];
+            ?>
+            <div class="dashboard-card rounded-2xl mb-8 overflow-hidden">
+                <div class="bg-gradient-to-r <?php echo $cm['grad']; ?> px-6 py-5 flex items-center justify-between flex-wrap gap-3">
+                    <div class="flex items-center gap-4">
+                        <div class="w-12 h-12 rounded-2xl bg-white/15 backdrop-blur flex items-center justify-center flex-shrink-0">
+                            <i class="fa-solid <?php echo $cm['icon']; ?> text-white text-xl"></i>
+                        </div>
+                        <div>
+                            <p class="text-white/70 text-[10px] font-black uppercase tracking-widest">My Class</p>
+                            <h3 class="text-white text-2xl font-black tracking-tight"><?php echo htmlspecialchars($myClass['class_code']); ?></h3>
+                        </div>
+                    </div>
+                    <span class="px-4 py-1.5 rounded-full bg-white/15 backdrop-blur text-white text-[10px] font-black uppercase tracking-widest">
+                        <?php echo htmlspecialchars($myClass['category']); ?>
+                    </span>
+                </div>
+                <div class="px-6 py-4 flex items-center gap-8 flex-wrap">
+                    <div>
+                        <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Classmates</p>
+                        <p class="text-lg font-black text-slate-800"><?php echo intval($myClass['classmates_count']); ?> <span class="text-xs font-medium text-slate-400">of <?php echo intval($myClass['capacity']); ?> seats</span></p>
+                    </div>
+                    <div>
+                        <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Allocated On</p>
+                        <p class="text-lg font-black text-slate-800"><?php echo date('d M Y', strtotime($myClass['allocated_at'])); ?></p>
+                    </div>
+                    <div class="ml-auto">
+                        <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full <?php echo $cm['light']; ?> <?php echo $cm['text']; ?> text-[10px] font-black uppercase">
+                            <i class="fa-solid fa-circle-check"></i> Active
+                        </span>
+                    </div>
+                </div>
+            </div>
+            <?php else: ?>
+            <div class="dashboard-card p-5 rounded-2xl mb-8 flex items-center gap-4 border-l-4 border-l-amber-400 bg-amber-50/40">
+                <div class="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                    <i class="fa-solid fa-people-roof text-amber-500 text-lg"></i>
+                </div>
+                <div>
+                    <p class="text-xs font-black text-amber-700 uppercase tracking-widest">No Class Allocated Yet</p>
+                    <p class="text-slate-500 text-xs mt-0.5">You haven't been assigned to a class. Please contact the admin office.</p>
+                </div>
+            </div>
+            <?php endif; ?>
+
+            <!-- ── My Semester & Academic Year (live, per course) ── -->
+            <?php if (!empty($my_semesters)): ?>
+            <div class="dashboard-card rounded-2xl mb-8 overflow-hidden">
+                <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                    <h4 class="font-black text-sm uppercase text-slate-700 tracking-wide"><i class="fa-solid fa-calendar-days mr-2 text-blue-500"></i>Semester &amp; Year</h4>
+                </div>
+                <div class="divide-y divide-slate-50">
+                <?php foreach ($my_semesters as $ms): ?>
+                    <div class="px-6 py-4 flex items-center justify-between flex-wrap gap-3">
+                        <p class="text-sm font-black text-slate-800"><?php echo htmlspecialchars($ms['title']); ?></p>
+                        <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-black uppercase">
+                            <i class="fa-solid fa-graduation-cap"></i> Year <?php echo $ms['year']; ?> · Semester <?php echo $ms['semester_in_year']; ?>
+                        </span>
+                    </div>
+                <?php endforeach; ?>
+                </div>
+                <p class="px-6 pb-4 text-[10px] text-slate-400">Updates automatically as you register for later-semester units.</p>
+            </div>
+            <?php endif; ?>
+
+            <!-- ── Course Completion Status ── -->
+            <?php if (!empty($my_completions)): ?>
+            <div class="dashboard-card rounded-2xl mb-8 overflow-hidden">
+                <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                    <h4 class="font-black text-sm uppercase text-slate-700 tracking-wide"><i class="fa-solid fa-file-circle-check mr-2 text-violet-500"></i>Completion Status</h4>
+                </div>
+                <div class="divide-y divide-slate-50">
+                <?php foreach ($my_completions as $mc): ?>
+                    <div class="px-6 py-4 flex items-center justify-between flex-wrap gap-3">
+                        <div>
+                            <p class="text-sm font-black text-slate-800"><?php echo htmlspecialchars($mc['title']); ?></p>
+                            <p class="text-[10px] text-slate-400 mt-0.5">
+                                <?php echo $mc['total_units'] > 0 ? "{$mc['passed_units']} of {$mc['total_units']} unit(s) passed" : 'No units added yet'; ?>
+                            </p>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <?php if ($mc['status'] === 'complete'): ?>
+                            <span class="px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-black uppercase tracking-widest"><i class="fa-solid fa-circle-check mr-1"></i>Complete</span>
+                            <?php elseif ($mc['status'] === 'incomplete'): ?>
+                            <span class="px-3 py-1.5 rounded-full bg-amber-50 text-amber-700 text-[10px] font-black uppercase tracking-widest"><i class="fa-solid fa-hourglass-half mr-1"></i>In Progress</span>
+                            <?php else: ?>
+                            <span class="px-3 py-1.5 rounded-full bg-slate-100 text-slate-500 text-[10px] font-black uppercase tracking-widest">No Units Yet</span>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+                </div>
+            </div>
+            <?php endif; ?>
 
             <?php if (!empty($masteryData)): ?>
             <div class="dashboard-card p-6 rounded-2xl mb-8">
@@ -986,9 +1377,13 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
         </div>
 
         <div id="view-all-courses" class="view-section">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div style="max-width:420px;margin-bottom:20px;position:relative;">
+                <i class="fa-solid fa-magnifying-glass" style="position:absolute;left:16px;top:50%;transform:translateY(-50%);color:#94a3b8;font-size:13px;"></i>
+                <input type="text" id="allCoursesSearch" onkeyup="filterCourseCards('allCoursesSearch','allCoursesGrid')" placeholder="Search available courses…" style="width:100%;padding:12px 16px 12px 40px;border:1.5px solid #e2e8f0;border-radius:14px;font-size:13px;font-weight:600;color:#0f172a;box-sizing:border-box;">
+            </div>
+            <div id="allCoursesGrid" class="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <?php mysqli_data_seek($available_query, 0); while($row = mysqli_fetch_assoc($available_query)): ?>
-                    <div class="dashboard-card p-6 rounded-3xl">
+                    <div class="dashboard-card p-6 rounded-3xl course-card" data-name="<?php echo strtolower(htmlspecialchars($row['title'])); ?>">
                         <h5 class="text-slate-900 font-black uppercase text-xs mb-4"><?php echo htmlspecialchars($row['title']); ?></h5>
                         <form method="POST">
                             <input type="hidden" name="course_id" value="<?php echo $row['id']; ?>">
@@ -997,12 +1392,17 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
                     </div>
                 <?php endwhile; ?>
             </div>
+            <p id="allCoursesEmpty" class="text-slate-400 text-xs font-bold uppercase text-center py-10" style="display:none;">No courses match your search.</p>
         </div>
 
         <div id="view-my-courses" class="view-section">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div style="max-width:420px;margin-bottom:20px;position:relative;">
+                <i class="fa-solid fa-magnifying-glass" style="position:absolute;left:16px;top:50%;transform:translateY(-50%);color:#94a3b8;font-size:13px;"></i>
+                <input type="text" id="myCoursesSearch" onkeyup="filterCourseCards('myCoursesSearch','myCoursesGrid')" placeholder="Search your enrolled courses…" style="width:100%;padding:12px 16px 12px 40px;border:1.5px solid #e2e8f0;border-radius:14px;font-size:13px;font-weight:600;color:#0f172a;box-sizing:border-box;">
+            </div>
+            <div id="myCoursesGrid" class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <?php mysqli_data_seek($enrolled_query, 0); while($course = mysqli_fetch_assoc($enrolled_query)): ?>
-                    <div class="dashboard-card p-6 rounded-3xl">
+                    <div class="dashboard-card p-6 rounded-3xl course-card" data-name="<?php echo strtolower(htmlspecialchars($course['title'])); ?>">
                         <div class="flex justify-between items-start mb-6">
                             <h5 class="text-slate-900 font-black uppercase text-sm italic"><?php echo htmlspecialchars($course['title']); ?></h5>
                             <form method="POST" onsubmit="return confirm('Drop this course?')">
@@ -1016,16 +1416,33 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
                     </div>
                 <?php endwhile; ?>
             </div>
+            <p id="myCoursesEmpty" class="text-slate-400 text-xs font-bold uppercase text-center py-10" style="display:none;">No enrolled courses match your search.</p>
         </div>
+
+        <script>
+        function filterCourseCards(inputId, gridId) {
+            const q = document.getElementById(inputId).value.trim().toLowerCase();
+            const grid = document.getElementById(gridId);
+            const cards = grid.querySelectorAll('.course-card');
+            let visibleCount = 0;
+            cards.forEach(card => {
+                const match = card.dataset.name.includes(q);
+                card.style.display = match ? '' : 'none';
+                if (match) visibleCount++;
+            });
+            const emptyMsg = document.getElementById(gridId === 'allCoursesGrid' ? 'allCoursesEmpty' : 'myCoursesEmpty');
+            if (emptyMsg) emptyMsg.style.display = (visibleCount === 0 && q !== '') ? 'block' : 'none';
+        }
+        </script>
 
         <div id="view-assignments" class="view-section">
             <div class="flex items-center justify-between mb-6">
                 <div>
                     <h2 class="text-2xl font-black text-slate-900 uppercase italic">My Assignments</h2>
-                    <p class="text-slate-500 text-[10px] font-black uppercase tracking-widest">Submit work · View plagiarism analysis</p>
+                    <p class="text-slate-500 text-[10px] font-black uppercase tracking-widest">Pick a unit to view and submit its assignments</p>
                 </div>
             </div>
-            <?php if (empty($assignments_for_student)): ?>
+            <?php if (empty($assignments_by_course)): ?>
             <div class="bg-white rounded-3xl border border-slate-100 p-12 text-center">
                 <div class="w-12 h-12 bg-slate-50 rounded-xl flex items-center justify-center mx-auto mb-3">
                     <i class="fa-solid fa-file-pen text-slate-300 text-xl"></i>
@@ -1034,56 +1451,98 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
                 <p class="text-slate-400 text-xs mt-1">Your lecturers will post assignments here.</p>
             </div>
             <?php else: ?>
-            <div class="space-y-4">
-            <?php foreach ($assignments_for_student as $asgn):
-                $submitted  = !empty($asgn['submission_id']);
-                $isOverdue  = $asgn['due_date'] && strtotime($asgn['due_date']) < time();
-                $verdict    = $asgn['verdict'] ?? '';
-                $vBg = match($verdict) {
-                    'HIGH RISK'   => 'bg-red-50 text-red-600 border-red-100',
-                    'MEDIUM RISK' => 'bg-yellow-50 text-yellow-700 border-yellow-100',
-                    default       => 'bg-emerald-50 text-emerald-700 border-emerald-100'
-                };
-                $vIcon = match($verdict) {
-                    'HIGH RISK'   => 'fa-triangle-exclamation',
-                    'MEDIUM RISK' => 'fa-circle-exclamation',
-                    default       => 'fa-circle-check'
-                };
-            ?>
-            <div class="dashboard-card p-5 rounded-2xl">
-                <div class="flex items-start justify-between gap-4">
-                    <div class="flex-1">
-                        <div class="flex flex-wrap gap-2 mb-1.5">
-                            <span class="text-[9px] font-black uppercase text-blue-700 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-lg"><?php echo htmlspecialchars($asgn['course_title']); ?></span>
-                            <?php if ($submitted): ?>
-                            <span class="text-[9px] font-black uppercase text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-lg"><i class="fa-solid fa-check mr-1"></i>Submitted</span>
-                            <?php endif; ?>
-                            <?php if ($isOverdue && !$submitted): ?>
-                            <span class="text-[9px] font-black uppercase text-red-600 bg-red-50 border border-red-100 px-2 py-0.5 rounded-lg">Overdue</span>
-                            <?php endif; ?>
-                        </div>
-                        <h5 class="font-extrabold text-slate-900 text-sm mb-1"><?php echo htmlspecialchars($asgn['title']); ?></h5>
-                        <div class="flex flex-wrap gap-3 text-[10px] font-bold text-slate-400 uppercase">
-                            <?php if ($asgn['due_date']): ?>
-                            <span><i class="fa-solid fa-calendar-days mr-1 <?php echo $isOverdue ? 'text-red-500' : 'text-blue-500'; ?>"></i>Due: <?php echo date('d M Y', strtotime($asgn['due_date'])); ?></span>
-                            <?php endif; ?>
-                            <span><i class="fa-solid fa-align-left mr-1 text-blue-500"></i><?php echo number_format($asgn['max_words']); ?> words</span>
-                            <?php if ($submitted && $verdict): ?>
-                            <span class="border <?php echo $vBg; ?> rounded-lg px-2 py-0.5">
-                                <i class="fa-solid <?php echo $vIcon; ?> mr-1"></i><?php echo $verdict; ?> (<?php echo number_format($asgn['overall_score'], 1); ?>%)
-                            </span>
-                            <?php endif; ?>
+
+            <!-- ── Step 1: pick a unit ── -->
+            <div id="assign-unit-grid" class="grid grid-cols-1 md:grid-cols-3 gap-5">
+                <?php foreach ($assignments_by_course as $cid => $grp):
+                    $total = count($grp['items']);
+                    $pending = count(array_filter($grp['items'], fn($x) => empty($x['submission_id'])));
+                ?>
+                <div onclick="openAssignmentUnit(<?php echo $cid; ?>)" class="dashboard-card p-6 rounded-3xl cursor-pointer hover:shadow-lg hover:-translate-y-0.5 transition-all">
+                    <div class="w-11 h-11 bg-indigo-50 rounded-2xl flex items-center justify-center mb-4">
+                        <i class="fa-solid fa-book text-indigo-500"></i>
+                    </div>
+                    <h5 class="font-black text-slate-900 text-sm mb-1"><?php echo htmlspecialchars($grp['title']); ?></h5>
+                    <p class="text-[10px] font-bold text-slate-400 uppercase"><?php echo $total; ?> assignment<?php echo $total===1?'':'s'; ?>
+                        <?php if ($pending > 0): ?><span class="text-amber-600">· <?php echo $pending; ?> pending</span><?php endif; ?>
+                    </p>
+                </div>
+                <?php endforeach; ?>
+            </div>
+
+            <!-- ── Step 2: assignments for the selected unit ── -->
+            <div id="assign-unit-detail" class="hidden">
+                <button onclick="closeAssignmentUnit()" class="mb-5 flex items-center gap-2 text-[10px] font-black uppercase text-indigo-600 hover:text-indigo-800 transition-all">
+                    <i class="fa-solid fa-arrow-left"></i> Back to Units
+                </button>
+                <?php foreach ($assignments_by_course as $cid => $grp): ?>
+                <div class="assign-unit-panel space-y-4" data-course="<?php echo $cid; ?>" style="display:none;">
+                    <h3 class="font-black text-slate-800 text-base mb-2"><?php echo htmlspecialchars($grp['title']); ?></h3>
+                    <?php foreach ($grp['items'] as $asgn):
+                        $submitted  = !empty($asgn['submission_id']);
+                        $isOverdue  = $asgn['due_date'] && strtotime($asgn['due_date']) < time();
+                        $verdict    = $asgn['verdict'] ?? '';
+                        $vBg = match($verdict) {
+                            'HIGH RISK'   => 'bg-red-50 text-red-600 border-red-100',
+                            'MEDIUM RISK' => 'bg-yellow-50 text-yellow-700 border-yellow-100',
+                            default       => 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                        };
+                        $vIcon = match($verdict) {
+                            'HIGH RISK'   => 'fa-triangle-exclamation',
+                            'MEDIUM RISK' => 'fa-circle-exclamation',
+                            default       => 'fa-circle-check'
+                        };
+                    ?>
+                    <div class="dashboard-card p-5 rounded-2xl">
+                        <div class="flex items-start justify-between gap-4">
+                            <div class="flex-1">
+                                <div class="flex flex-wrap gap-2 mb-1.5">
+                                    <span class="text-[9px] font-black uppercase text-blue-700 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-lg"><?php echo htmlspecialchars($asgn['course_title']); ?></span>
+                                    <?php if ($submitted): ?>
+                                    <span class="text-[9px] font-black uppercase text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-lg"><i class="fa-solid fa-check mr-1"></i>Submitted</span>
+                                    <?php endif; ?>
+                                    <?php if ($isOverdue && !$submitted): ?>
+                                    <span class="text-[9px] font-black uppercase text-red-600 bg-red-50 border border-red-100 px-2 py-0.5 rounded-lg">Overdue</span>
+                                    <?php endif; ?>
+                                </div>
+                                <h5 class="font-extrabold text-slate-900 text-sm mb-1"><?php echo htmlspecialchars($asgn['title']); ?></h5>
+                                <div class="flex flex-wrap gap-3 text-[10px] font-bold text-slate-400 uppercase">
+                                    <?php if ($asgn['due_date']): ?>
+                                    <span><i class="fa-solid fa-calendar-days mr-1 <?php echo $isOverdue ? 'text-red-500' : 'text-blue-500'; ?>"></i>Due: <?php echo date('d M Y', strtotime($asgn['due_date'])); ?></span>
+                                    <?php endif; ?>
+                                    <span><i class="fa-solid fa-align-left mr-1 text-blue-500"></i><?php echo number_format($asgn['max_words']); ?> words</span>
+                                    <?php if ($submitted && $verdict): ?>
+                                    <span class="border <?php echo $vBg; ?> rounded-lg px-2 py-0.5">
+                                        <i class="fa-solid <?php echo $vIcon; ?> mr-1"></i><?php echo $verdict; ?> (<?php echo number_format($asgn['overall_score'], 1); ?>%)
+                                    </span>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                            <a href="assignment_submit.php?submit_id=<?php echo $asgn['id']; ?>"
+                               class="flex-shrink-0 px-4 py-2.5 <?php echo $submitted ? 'bg-slate-700 hover:bg-slate-800' : 'bg-indigo-600 hover:bg-indigo-700'; ?> text-white font-black text-[9px] uppercase rounded-xl tracking-widest transition-all active:scale-95">
+                                <i class="fa-solid <?php echo $submitted ? 'fa-rotate' : 'fa-file-pen'; ?> mr-1"></i>
+                                <?php echo $submitted ? 'Resubmit' : 'Submit'; ?>
+                            </a>
                         </div>
                     </div>
-                    <a href="assignment_submit.php?submit_id=<?php echo $asgn['id']; ?>"
-                       class="flex-shrink-0 px-4 py-2.5 <?php echo $submitted ? 'bg-slate-700 hover:bg-slate-800' : 'bg-indigo-600 hover:bg-indigo-700'; ?> text-white font-black text-[9px] uppercase rounded-xl tracking-widest transition-all active:scale-95">
-                        <i class="fa-solid <?php echo $submitted ? 'fa-rotate' : 'fa-file-pen'; ?> mr-1"></i>
-                        <?php echo $submitted ? 'Resubmit' : 'Submit'; ?>
-                    </a>
+                    <?php endforeach; ?>
                 </div>
+                <?php endforeach; ?>
             </div>
-            <?php endforeach; ?>
-            </div>
+
+            <script>
+            function openAssignmentUnit(courseId) {
+                document.getElementById('assign-unit-grid').style.display = 'none';
+                document.getElementById('assign-unit-detail').classList.remove('hidden');
+                document.querySelectorAll('.assign-unit-panel').forEach(p => {
+                    p.style.display = (p.dataset.course === String(courseId)) ? 'block' : 'none';
+                });
+            }
+            function closeAssignmentUnit() {
+                document.getElementById('assign-unit-detail').classList.add('hidden');
+                document.getElementById('assign-unit-grid').style.display = 'grid';
+            }
+            </script>
             <?php endif; ?>
         </div>
 
@@ -1132,12 +1591,23 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
             $enrolled_courses_for_units = [];
             while ($ec = mysqli_fetch_assoc($enrolled_courses_res)) $enrolled_courses_for_units[] = $ec;
 
-            // My registered unit IDs
+            // My registered unit IDs — latest attempt only, with its status
             $my_unit_ids_res = mysqli_query($conn,
-                "SELECT unit_id FROM unit_registrations WHERE student_id = '$user_id'"
+                "SELECT ur.unit_id, ur.status, ur.attempt_no FROM unit_registrations ur
+                 INNER JOIN (
+                     SELECT unit_id, MAX(attempt_no) AS max_attempt
+                     FROM unit_registrations WHERE student_id = '$user_id'
+                     GROUP BY unit_id
+                 ) latest ON latest.unit_id = ur.unit_id AND latest.max_attempt = ur.attempt_no
+                 WHERE ur.student_id = '$user_id'"
             );
-            $my_unit_ids = [];
-            while ($muid = mysqli_fetch_assoc($my_unit_ids_res)) $my_unit_ids[] = intval($muid['unit_id']);
+            $my_unit_ids = [];       // unit_id => true  (kept for compatibility with existing checks)
+            $my_unit_status = [];    // unit_id => ['status'=>..., 'attempt_no'=>...]
+            while ($muid = mysqli_fetch_assoc($my_unit_ids_res)) {
+                $uidk = intval($muid['unit_id']);
+                $my_unit_ids[] = $uidk;
+                $my_unit_status[$uidk] = ['status' => $muid['status'], 'attempt_no' => intval($muid['attempt_no'])];
+            }
 
             // Group courses to emulate attendance tabs
             $units_by_course = [];
@@ -1152,6 +1622,11 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
                     <h2 class="text-2xl font-black text-slate-900" id="units-page-title">My Units</h2>
                     <p class="text-slate-500 text-sm mt-1" id="units-page-sub">Register for the units you want to take within each enrolled course.</p>
                 </div>
+            </div>
+
+            <div style="max-width:420px;margin-bottom:16px;position:relative;">
+                <i class="fa-solid fa-magnifying-glass" style="position:absolute;left:16px;top:50%;transform:translateY(-50%);color:#94a3b8;font-size:13px;"></i>
+                <input type="text" id="unitsSearchInput" onkeyup="filterUnitsSearch()" placeholder="Search units by name or code…" style="width:100%;padding:12px 16px 12px 40px;border:1.5px solid #e2e8f0;border-radius:14px;font-size:13px;font-weight:600;color:#0f172a;box-sizing:border-box;">
             </div>
 
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px;overflow-x:auto;padding-bottom:4px;">
@@ -1221,8 +1696,12 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
                 <div class="divide-y divide-slate-50">
                 <?php foreach ($avail_units as $av):
                     $is_registered = in_array($av['id'], $my_unit_ids);
+                    $u_stat = $my_unit_status[$av['id']] ?? null;
+                    $uc_live = $is_registered ? unit_completion_status($conn, $user_id, intval($av['id'])) : null;
+                    $is_failed = $uc_live && $uc_live['resolved'] === 'failed';
+                    $is_passed = $uc_live && $uc_live['resolved'] === 'passed';
                 ?>
-                <div class="px-7 py-4 flex items-center justify-between group">
+                <div class="px-7 py-4 flex items-center justify-between group unit-row" data-unit-name="<?php echo strtolower(htmlspecialchars($av['title'] . ' ' . ($av['unit_code'] ?? ''))); ?>">
                     <div class="flex items-center space-x-4">
                         <div class="w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0 <?php echo $is_registered ? 'bg-emerald-100' : 'bg-slate-100'; ?>">
                             <i class="fa-solid fa-book <?php echo $is_registered ? 'text-emerald-600' : 'text-slate-400'; ?>"></i>
@@ -1233,8 +1712,12 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
                                 <?php if ($av['unit_code']): ?>
                                 <span class="text-[9px] font-black uppercase bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded-md"><?php echo htmlspecialchars($av['unit_code']); ?></span>
                                 <?php endif; ?>
-                                <?php if ($is_registered): ?>
-                                <span class="text-[9px] font-black uppercase bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-lg"><i class="fa-solid fa-check mr-0.5"></i>Registered</span>
+                                <?php if ($is_passed): ?>
+                                <span class="text-[9px] font-black uppercase bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-lg"><i class="fa-solid fa-check mr-0.5"></i>Passed</span>
+                                <?php elseif ($is_failed): ?>
+                                <span class="text-[9px] font-black uppercase bg-red-50 text-red-600 px-2 py-0.5 rounded-lg"><i class="fa-solid fa-xmark mr-0.5"></i>Failed — Attempt <?php echo $u_stat['attempt_no']; ?></span>
+                                <?php elseif ($is_registered): ?>
+                                <span class="text-[9px] font-black uppercase bg-blue-50 text-blue-600 px-2 py-0.5 rounded-lg"><i class="fa-solid fa-check mr-0.5"></i>Registered</span>
                                 <?php endif; ?>
                             </div>
                             <?php if ($av['description']): ?>
@@ -1253,23 +1736,34 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
                             <i class="fa-solid fa-folder-open mr-1"></i>Materials
                         </button>
                         <?php endif; ?>
+                        <?php if ($is_failed): ?>
                         <form action="unit_actions.php" method="POST">
-                            <?php if ($is_registered): ?>
+                            <input type="hidden" name="action" value="retake_unit">
+                            <input type="hidden" name="unit_id" value="<?php echo $av['id']; ?>">
+                            <button type="submit"
+                                class="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white font-black text-[9px] uppercase rounded-xl tracking-widest transition-all shadow-sm">
+                                <i class="fa-solid fa-rotate-right mr-1"></i>Retake (New Intake)
+                            </button>
+                        </form>
+                        <?php elseif ($is_registered): ?>
+                        <form action="unit_actions.php" method="POST">
                             <input type="hidden" name="action" value="deregister_unit">
                             <input type="hidden" name="unit_id" value="<?php echo $av['id']; ?>">
                             <button type="submit"
                                 class="px-4 py-2 bg-red-50 hover:bg-red-600 text-red-500 hover:text-white border border-red-100 font-black text-[9px] uppercase rounded-xl tracking-widest transition-all">
                                 <i class="fa-solid fa-minus mr-1"></i>Drop
                             </button>
-                            <?php else: ?>
+                        </form>
+                        <?php else: ?>
+                        <form action="unit_actions.php" method="POST">
                             <input type="hidden" name="action" value="register_unit">
                             <input type="hidden" name="unit_id" value="<?php echo $av['id']; ?>">
                             <button type="submit"
                                 class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-black text-[9px] uppercase rounded-xl tracking-widest transition-all shadow-sm">
                                 <i class="fa-solid fa-plus mr-1"></i>Register
                             </button>
-                            <?php endif; ?>
                         </form>
+                        <?php endif; ?>
                     </div>
                 </div>
                 <?php endforeach; ?>
@@ -1738,6 +2232,11 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
                 <a href="fee_statement.php" target="_blank" style="display:inline-flex;align-items:center;gap:7px;background:linear-gradient(135deg,#0a1628,#1e3a5f);color:#c9a84c;padding:9px 16px;border-radius:10px;font-size:12px;font-weight:800;text-decoration:none;border:1px solid rgba(201,168,76,.3);">
                     <i class="fa-solid fa-file-invoice"></i> Download Fee Statement
                 </a>
+                <?php if ($total_fee_balance > 0): ?>
+                <button type="button" onclick="openMpesaModal(null, 'General Fee Payment', <?php echo $total_fee_balance; ?>)" style="display:inline-flex;align-items:center;gap:7px;background:#10b981;color:#fff;padding:9px 16px;border-radius:10px;font-size:12px;font-weight:800;border:none;cursor:pointer;">
+                    <i class="fa-solid fa-mobile-screen-button"></i> Pay with M-Pesa
+                </button>
+                <?php endif; ?>
                 <?php if ($unread_reminders > 0): ?>
                 <form method="POST" style="flex-shrink:0;">
                     <input type="hidden" name="mark_reminders_read" value="1">
@@ -1843,7 +2342,7 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
                 <thead>
                     <tr>
                         <th>Fee</th><th>Category</th><th>Period</th>
-                        <th>Due Date</th><th>Total</th><th>Paid</th><th>Balance</th><th>Status</th>
+                        <th>Due Date</th><th>Total</th><th>Paid</th><th>Balance</th><th>Status</th><th>Action</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -1889,6 +2388,15 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
                             <?php if ($disp_status==='cleared'): ?><i class="fa-solid fa-shield-check"></i><?php endif; ?>
                             <?php echo $disp_label; ?>
                         </span>
+                    </td>
+                    <td>
+                        <?php if ($fa_bal > 0): ?>
+                        <button type="button" onclick="openMpesaModal(<?php echo intval($fa['id']); ?>, '<?php echo htmlspecialchars(addslashes($fa['fee_name'])); ?>', <?php echo $fa_bal; ?>)" style="display:inline-flex;align-items:center;gap:5px;background:#10b981;color:#fff;padding:6px 10px;border-radius:8px;font-size:11px;font-weight:800;border:none;cursor:pointer;white-space:nowrap;">
+                            <i class="fa-solid fa-mobile-screen-button"></i> Pay
+                        </button>
+                        <?php else: ?>
+                        <span style="color:#cbd5e1;font-size:11px;">—</span>
+                        <?php endif; ?>
                     </td>
                 </tr>
                 <?php endforeach; ?>
@@ -1941,6 +2449,11 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
                         <div class="fp-prog"><div class="fp-prog-fill" style="width:<?php echo $fa_pct; ?>%;background:#10b981;"></div></div>
                         <div style="font-size:10px;color:#94a3b8;margin-top:3px;"><?php echo $fa_pct; ?>% paid</div>
                     </div>
+                    <?php if ($fa_bal > 0): ?>
+                    <button type="button" onclick="openMpesaModal(<?php echo intval($fa['id']); ?>, '<?php echo htmlspecialchars(addslashes($fa['fee_name'])); ?>', <?php echo $fa_bal; ?>)" style="margin-top:10px;width:100%;display:flex;align-items:center;justify-content:center;gap:6px;background:#10b981;color:#fff;padding:9px;border-radius:9px;font-size:12px;font-weight:800;border:none;cursor:pointer;">
+                        <i class="fa-solid fa-mobile-screen-button"></i> Pay with M-Pesa
+                    </button>
+                    <?php endif; ?>
                 </div>
                 <?php endforeach; ?>
             </div>
@@ -2019,9 +2532,175 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
             <?php endif; ?>
         </div>
 
-    </div></div>
-
     </div><!-- /fp-wrap -->
+
+    <!-- ══════════════ M-PESA PAYMENT MODAL ══════════════ -->
+    <style>
+    .mp-overlay{display:none;position:fixed;inset:0;background:rgba(15,23,42,.55);backdrop-filter:blur(3px);z-index:9999;align-items:center;justify-content:center;padding:16px;}
+    .mp-overlay.active{display:flex;}
+    .mp-modal{background:#fff;border-radius:18px;max-width:380px;width:100%;padding:0;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.3);animation:mpPop .25s ease;}
+    @keyframes mpPop{from{opacity:0;transform:scale(.94) translateY(8px)}to{opacity:1;transform:none}}
+    .mp-head{background:linear-gradient(135deg,#0a1628,#1e3a5f);padding:20px 22px;position:relative;}
+    .mp-head h3{color:#fff;font-size:16px;font-weight:900;margin:0;display:flex;align-items:center;gap:9px;}
+    .mp-head p{color:rgba(255,255,255,.65);font-size:11px;margin:4px 0 0 29px;}
+    .mp-close{position:absolute;top:16px;right:18px;background:rgba(255,255,255,.12);border:none;color:#fff;width:26px;height:26px;border-radius:8px;cursor:pointer;font-size:13px;}
+    .mp-body{padding:22px;}
+    .mp-field{margin-bottom:16px;}
+    .mp-field label{display:block;font-size:11px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;}
+    .mp-field input{width:100%;box-sizing:border-box;border:1.5px solid #e2e8f0;border-radius:10px;padding:11px 13px;font-size:14px;font-weight:600;color:#0f172a;font-family:inherit;}
+    .mp-field input:focus{outline:none;border-color:#10b981;}
+    .mp-hint{font-size:10.5px;color:#94a3b8;margin-top:5px;}
+    .mp-pay-btn{width:100%;background:#10b981;color:#fff;border:none;padding:13px;border-radius:11px;font-size:13px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;}
+    .mp-pay-btn:disabled{opacity:.6;cursor:not-allowed;}
+    .mp-status{display:none;text-align:center;padding:8px 4px 4px;}
+    .mp-status.active{display:block;}
+    .mp-spinner{width:40px;height:40px;border:3.5px solid #d1fae5;border-top-color:#10b981;border-radius:50%;margin:4px auto 14px;animation:mpspin 1s linear infinite;}
+    @keyframes mpspin{to{transform:rotate(360deg)}}
+    .mp-status-icon{width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:4px auto 14px;font-size:24px;color:#fff;}
+    .mp-status-msg{font-size:13px;font-weight:700;color:#0f172a;line-height:1.5;}
+    .mp-status-sub{font-size:11px;color:#94a3b8;margin-top:6px;}
+    .mp-retry-btn{margin-top:16px;background:#f1f5f9;color:#334155;border:none;padding:10px 18px;border-radius:9px;font-size:12px;font-weight:800;cursor:pointer;}
+    </style>
+
+    <div class="mp-overlay" id="mpOverlay">
+      <div class="mp-modal">
+        <div class="mp-head">
+          <button type="button" class="mp-close" onclick="closeMpesaModal()">✕</button>
+          <h3><i class="fa-solid fa-mobile-screen-button"></i> Pay with M-Pesa</h3>
+          <p id="mpFeeLabel">Fee payment</p>
+        </div>
+        <div class="mp-body">
+          <div id="mpFormSection">
+            <div class="mp-field">
+              <label>M-Pesa Phone Number</label>
+              <input type="tel" id="mpPhone" placeholder="07XXXXXXXX" autocomplete="tel">
+              <div class="mp-hint">You'll get an STK push prompt on this number to enter your PIN.</div>
+            </div>
+            <div class="mp-field">
+              <label>Amount (KES)</label>
+              <input type="number" id="mpAmount" min="1" step="1">
+            </div>
+            <button type="button" class="mp-pay-btn" id="mpPayBtn" onclick="submitMpesaPayment()">
+              <i class="fa-solid fa-lock"></i> Send Payment Request
+            </button>
+          </div>
+
+          <div class="mp-status" id="mpStatusSection">
+            <div id="mpStatusVisual"></div>
+            <div class="mp-status-msg" id="mpStatusMsg"></div>
+            <div class="mp-status-sub" id="mpStatusSub"></div>
+            <button type="button" class="mp-retry-btn" id="mpRetryBtn" style="display:none;" onclick="resetMpesaModal()">Try Again</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+    let mpPollTimer = null;
+    let mpPollAttempts = 0;
+
+    function openMpesaModal(feeAssignmentId, feeName, balance) {
+        document.getElementById('mpOverlay').classList.add('active');
+        document.getElementById('mpFeeLabel').textContent = feeName || 'General Fee Payment';
+        document.getElementById('mpAmount').value = balance ? Math.round(balance) : '';
+        document.getElementById('mpPhone').value = '';
+        document.getElementById('mpOverlay').dataset.feeAssignmentId = feeAssignmentId || '';
+        resetMpesaModal();
+    }
+
+    function closeMpesaModal() {
+        document.getElementById('mpOverlay').classList.remove('active');
+        if (mpPollTimer) { clearInterval(mpPollTimer); mpPollTimer = null; }
+    }
+
+    function resetMpesaModal() {
+        document.getElementById('mpFormSection').style.display = 'block';
+        document.getElementById('mpStatusSection').classList.remove('active');
+        document.getElementById('mpRetryBtn').style.display = 'none';
+        const btn = document.getElementById('mpPayBtn');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-lock"></i> Send Payment Request';
+        if (mpPollTimer) { clearInterval(mpPollTimer); mpPollTimer = null; }
+    }
+
+    function showMpStatus(kind, msg, sub) {
+        document.getElementById('mpFormSection').style.display = 'none';
+        document.getElementById('mpStatusSection').classList.add('active');
+        document.getElementById('mpStatusMsg').textContent = msg;
+        document.getElementById('mpStatusSub').textContent = sub || '';
+        const visual = document.getElementById('mpStatusVisual');
+        const retryBtn = document.getElementById('mpRetryBtn');
+        if (kind === 'waiting') {
+            visual.innerHTML = '<div class="mp-spinner"></div>';
+            retryBtn.style.display = 'none';
+        } else if (kind === 'success') {
+            visual.innerHTML = '<div class="mp-status-icon" style="background:#10b981;"><i class="fa-solid fa-check"></i></div>';
+            retryBtn.style.display = 'none';
+        } else {
+            visual.innerHTML = '<div class="mp-status-icon" style="background:#ef4444;"><i class="fa-solid fa-xmark"></i></div>';
+            retryBtn.style.display = 'inline-block';
+        }
+    }
+
+    function submitMpesaPayment() {
+        const phone = document.getElementById('mpPhone').value.trim();
+        const amount = document.getElementById('mpAmount').value;
+        const feeAssignmentId = document.getElementById('mpOverlay').dataset.feeAssignmentId || '';
+
+        if (!phone) { alert('Please enter your M-Pesa phone number.'); return; }
+        if (!amount || parseFloat(amount) < 1) { alert('Please enter a valid amount.'); return; }
+
+        const btn = document.getElementById('mpPayBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Sending request…';
+
+        const body = new URLSearchParams({ phone: phone, amount: amount, fee_assignment_id: feeAssignmentId });
+
+        fetch('initiate_mpesa_payment.php', { method: 'POST', headers: {'Content-Type':'application/x-www-form-urlencoded'}, body: body })
+            .then(r => r.json())
+            .then(data => {
+                if (!data.success) {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fa-solid fa-lock"></i> Send Payment Request';
+                    alert(data.message || 'Could not initiate payment.');
+                    return;
+                }
+                showMpStatus('waiting', 'Check your phone…', data.message || 'Enter your M-Pesa PIN to complete the payment.');
+                mpPollAttempts = 0;
+                mpPollTimer = setInterval(() => pollMpesaStatus(data.checkout_request_id), 3000);
+            })
+            .catch(() => {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa-solid fa-lock"></i> Send Payment Request';
+                alert('Network error — please try again.');
+            });
+    }
+
+    function pollMpesaStatus(checkoutId) {
+        mpPollAttempts++;
+        if (mpPollAttempts > 40) { // ~2 minutes
+            clearInterval(mpPollTimer); mpPollTimer = null;
+            showMpStatus('failed', 'Timed out waiting for confirmation.', 'If you completed the payment, refresh the page — it may still be processing.');
+            return;
+        }
+        fetch('check_mpesa_status.php?checkout_request_id=' + encodeURIComponent(checkoutId))
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    clearInterval(mpPollTimer); mpPollTimer = null;
+                    showMpStatus('success', 'Payment received!', 'Receipt ' + (data.receipt_number || '') + ' · KES ' + (data.amount || '') + '. Refreshing your dashboard…');
+                    setTimeout(() => window.location.reload(), 2200);
+                } else if (data.status === 'failed' || data.status === 'cancelled') {
+                    clearInterval(mpPollTimer); mpPollTimer = null;
+                    showMpStatus('failed', 'Payment not completed', data.message || 'The payment was cancelled or failed.');
+                }
+                // status === 'pending' → keep polling silently
+            })
+            .catch(() => { /* transient network error — keep polling */ });
+    }
+    </script>
+    <!-- ══════════════ /M-PESA PAYMENT MODAL ══════════════ -->
+
     </div><!-- /view-my-fees -->
 
     <!-- ══ VIEW: RESULT SLIP ══ -->
@@ -2268,6 +2947,223 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
     </div><!-- /padding-wrapper -->
     </div><!-- /view-my-boarding -->
 
+    <!-- ══ VIEW: MY DETAILS ══ -->
+    <div id="view-my-details" class="view-section">
+        <div style="max-width:760px;margin:0 auto;">
+            <div class="dashboard-card p-6 rounded-3xl mb-6" style="display:flex;align-items:center;gap:18px;">
+                <div style="width:64px;height:64px;border-radius:16px;background:linear-gradient(135deg,#3b82f6,#6366f1);display:flex;align-items:center;justify-content:center;color:#fff;font-size:24px;font-weight:900;flex-shrink:0;">
+                    <?php echo strtoupper(substr($my_profile['full_name'] ?? 'S', 0, 1)); ?>
+                </div>
+                <div>
+                    <h2 class="text-xl font-black text-slate-900"><?php echo htmlspecialchars($my_profile['full_name'] ?? ''); ?></h2>
+                    <p class="text-slate-400 text-xs font-bold uppercase tracking-widest mt-0.5">
+                        <?php echo htmlspecialchars($my_profile['admission_number'] ?? '—'); ?>
+                        <?php if (!empty($my_profile['course_name'])): ?> · <?php echo htmlspecialchars($my_profile['course_name']); ?><?php endif; ?>
+                    </p>
+                </div>
+            </div>
+
+            <form method="POST" class="dashboard-card p-8 rounded-3xl space-y-5">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div>
+                        <label class="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5 block">Full Name</label>
+                        <input type="text" value="<?php echo htmlspecialchars($my_profile['full_name'] ?? ''); ?>" disabled class="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-500 text-sm font-semibold">
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5 block">Admission No.</label>
+                        <input type="text" value="<?php echo htmlspecialchars($my_profile['admission_number'] ?? ''); ?>" disabled class="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-500 text-sm font-semibold">
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5 block">Email</label>
+                        <input type="text" value="<?php echo htmlspecialchars($my_profile['email'] ?? ''); ?>" disabled class="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-500 text-sm font-semibold">
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5 block">Phone Number</label>
+                        <input type="tel" name="phone" value="<?php echo htmlspecialchars($my_profile['phone'] ?? ''); ?>" placeholder="07XXXXXXXX" class="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm font-semibold focus:border-blue-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5 block">Date of Birth</label>
+                        <input type="date" name="date_of_birth" value="<?php echo htmlspecialchars($my_profile['date_of_birth'] ?? ''); ?>" class="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm font-semibold focus:border-blue-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5 block">Previous School</label>
+                        <input type="text" name="previous_school" value="<?php echo htmlspecialchars($my_profile['previous_school'] ?? ''); ?>" placeholder="e.g. Kakamega High School" class="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm font-semibold focus:border-blue-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5 block">Religion</label>
+                        <input type="text" name="religion" value="<?php echo htmlspecialchars($my_profile['religion'] ?? ''); ?>" class="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm font-semibold focus:border-blue-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5 block">Address</label>
+                        <input type="text" name="address" value="<?php echo htmlspecialchars($my_profile['address'] ?? ''); ?>" class="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm font-semibold focus:border-blue-500 focus:outline-none">
+                    </div>
+                </div>
+                <button type="submit" name="update_profile" class="px-8 py-3 bg-blue-600 text-white rounded-xl font-black text-xs uppercase shadow-lg shadow-blue-100">
+                    <i class="fa-solid fa-floppy-disk mr-2"></i>Save Changes
+                </button>
+            </form>
+        </div>
+    </div><!-- /view-my-details -->
+
+    <!-- ══ VIEW: APPLY FOR REFUND ══ -->
+    <div id="view-my-refunds" class="view-section">
+        <div style="max-width:760px;margin:0 auto;">
+            <div class="dashboard-card p-8 rounded-3xl mb-6">
+                <h2 class="text-lg font-black text-slate-900 uppercase mb-1">Apply for Refund</h2>
+                <p class="text-slate-400 text-xs font-bold uppercase tracking-widest mb-6">Request a refund of fee overpayment or credit balance</p>
+                <form method="POST" class="space-y-5">
+                    <div>
+                        <label class="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5 block">Amount (KES)</label>
+                        <input type="number" name="refund_amount" min="1" step="1" required class="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm font-semibold focus:border-blue-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5 block">Reason for Refund</label>
+                        <textarea name="refund_reason" rows="3" required placeholder="e.g. Overpayment on Semester 1 tuition" class="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm font-semibold focus:border-blue-500 focus:outline-none"></textarea>
+                    </div>
+                    <div>
+                        <label class="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5 block">Bank / M-Pesa Details for Payout</label>
+                        <input type="text" name="bank_details" placeholder="e.g. Equity Bank, Acc 001234567 or M-Pesa 07XXXXXXXX" class="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm font-semibold focus:border-blue-500 focus:outline-none">
+                    </div>
+                    <button type="submit" name="submit_refund" class="px-8 py-3 bg-emerald-600 text-white rounded-xl font-black text-xs uppercase shadow-lg shadow-emerald-100">
+                        <i class="fa-solid fa-paper-plane mr-2"></i>Submit Request
+                    </button>
+                </form>
+            </div>
+
+            <div class="dashboard-card p-6 rounded-3xl">
+                <h3 class="text-xs font-black text-slate-900 uppercase mb-4">Your Refund Requests</h3>
+                <?php if (empty($my_refunds)): ?>
+                <p class="text-slate-400 text-xs font-bold uppercase text-center py-8">No refund requests yet.</p>
+                <?php else: ?>
+                <div class="space-y-3">
+                <?php foreach ($my_refunds as $rf):
+                    $rf_colors = ['pending'=>['#d97706','#fef3c7'],'approved'=>['#059669','#d1fae5'],'rejected'=>['#dc2626','#fee2e2'],'paid'=>['#2563eb','#dbeafe']];
+                    [$rc, $rbg] = $rf_colors[$rf['status']] ?? ['#64748b','#f1f5f9'];
+                ?>
+                    <div style="border:1px solid #f1f5f9;border-radius:14px;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+                        <div>
+                            <p class="text-sm font-extrabold text-slate-900">KES <?php echo number_format($rf['amount'], 2); ?></p>
+                            <p class="text-slate-400 text-[11px] mt-0.5"><?php echo htmlspecialchars($rf['reason']); ?></p>
+                            <p class="text-slate-300 text-[10px] mt-1 uppercase font-bold"><?php echo date('d M Y', strtotime($rf['created_at'])); ?></p>
+                        </div>
+                        <span style="background:<?php echo $rbg; ?>;color:<?php echo $rc; ?>;font-size:10px;font-weight:800;padding:4px 12px;border-radius:20px;text-transform:uppercase;"><?php echo htmlspecialchars($rf['status']); ?></span>
+                    </div>
+                <?php endforeach; ?>
+                </div>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div><!-- /view-my-refunds -->
+
+    <!-- ══ VIEW: REGISTER FOR GRADUATION ══ -->
+    <div id="view-my-graduation" class="view-section">
+        <div style="max-width:760px;margin:0 auto;">
+            <div class="mb-6">
+                <h2 class="text-lg font-black text-slate-900 uppercase mb-1">Register for Graduation</h2>
+                <p class="text-slate-400 text-xs font-bold uppercase tracking-widest">Eligibility is checked per course — finishing one course doesn't require your other courses to be done too</p>
+            </div>
+
+            <?php if (!$grad_fees_clear): ?>
+            <div style="background:#fef2f2;border:1px solid #fecaca;color:#991b1b;padding:14px 18px;border-radius:14px;font-size:12px;font-weight:700;margin-bottom:16px;">
+                <i class="fa-solid fa-circle-exclamation mr-2"></i>You have an outstanding fee balance — clear it via <strong>Fees &amp; Payments</strong> before you can register for graduation in any course.
+            </div>
+            <?php endif; ?>
+
+            <?php foreach ($grad_course_status as $gc_id => $gc): ?>
+            <?php
+                $active_reg_for_course = null;
+                foreach ($my_graduations as $g) {
+                    if ($g['course_id'] == $gc_id && in_array($g['status'], ['pending','approved'])) { $active_reg_for_course = $g; break; }
+                }
+            ?>
+            <div class="dashboard-card p-6 rounded-3xl mb-4">
+                <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+                    <h3 class="text-sm font-black text-slate-900"><?php echo htmlspecialchars($gc['title']); ?></h3>
+                    <?php if ($gc['complete']): ?>
+                    <span style="background:#ecfdf5;color:#059669;font-size:10px;font-weight:800;padding:4px 12px;border-radius:20px;text-transform:uppercase;"><i class="fa-solid fa-circle-check mr-1"></i>Complete</span>
+                    <?php else: ?>
+                    <span style="background:#fef3c7;color:#92400e;font-size:10px;font-weight:800;padding:4px 12px;border-radius:20px;text-transform:uppercase;">In Progress</span>
+                    <?php endif; ?>
+                </div>
+
+                <?php if ($active_reg_for_course): ?>
+                <div style="background:#fef3c7;border:1px solid #fde68a;color:#92400e;padding:12px 16px;border-radius:12px;font-size:12px;font-weight:700;">
+                    <i class="fa-solid fa-circle-info mr-2"></i>You already have a <?php echo htmlspecialchars($active_reg_for_course['status']); ?> registration for this course — see below.
+                </div>
+                <?php elseif (!$gc['complete']): ?>
+                <div style="background:#f8fafc;border:1px solid #e2e8f0;color:#475569;padding:12px 16px;border-radius:12px;font-size:12px;">
+                    <?php if (!$gc['has_units']): ?>
+                    No units have been added to this course yet.
+                    <?php elseif (!empty($gc['unpassed'])): ?>
+                    <?php echo count($gc['unpassed']); ?> unit(s) not yet passed: <?php echo htmlspecialchars(implode(', ', array_slice($gc['unpassed'], 0, 5))); ?><?php echo count($gc['unpassed']) > 5 ? '…' : ''; ?>
+                    <?php elseif (!$grad_fees_clear): ?>
+                    Waiting on fee clearance (see banner above).
+                    <?php endif; ?>
+                </div>
+                <?php else: ?>
+                <form method="POST" class="space-y-4">
+                    <input type="hidden" name="course_id" value="<?php echo $gc_id; ?>">
+                    <div style="background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;padding:9px 14px;border-radius:10px;font-size:11px;font-weight:700;">
+                        <i class="fa-solid fa-circle-check mr-1"></i>Eligible — all units passed and fees cleared.
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                            <label class="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5 block">Intended Ceremony</label>
+                            <select name="intended_ceremony" required class="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold focus:border-blue-500 focus:outline-none">
+                                <option value="">Select…</option>
+                                <option value="December <?php echo date('Y'); ?> Graduation">December <?php echo date('Y'); ?> Graduation</option>
+                                <option value="July <?php echo date('Y')+1; ?> Graduation">July <?php echo date('Y')+1; ?> Graduation</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5 block">Gown Size</label>
+                            <select name="gown_size" class="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold focus:border-blue-500 focus:outline-none">
+                                <option value="">Select…</option>
+                                <?php foreach (['XS','S','M','L','XL','XXL'] as $sz): ?>
+                                <option value="<?php echo $sz; ?>"><?php echo $sz; ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                    </div>
+                    <button type="submit" name="submit_graduation" class="px-6 py-2.5 rounded-xl font-black text-xs uppercase shadow-lg text-white" style="background:linear-gradient(135deg,#0a1628,#1e3a5f);">
+                        <i class="fa-solid fa-graduation-cap mr-2"></i>Register for This Course
+                    </button>
+                </form>
+                <?php endif; ?>
+            </div>
+            <?php endforeach; ?>
+
+            <div class="dashboard-card p-6 rounded-3xl mt-2">
+                <h3 class="text-xs font-black text-slate-900 uppercase mb-4">Your Graduation Registrations</h3>
+                <?php if (empty($my_graduations)): ?>
+                <p class="text-slate-400 text-xs font-bold uppercase text-center py-8">No graduation registrations yet.</p>
+                <?php else: ?>
+                <div class="space-y-3">
+                <?php foreach ($my_graduations as $g):
+                    $g_colors = ['pending'=>['#d97706','#fef3c7'],'approved'=>['#059669','#d1fae5'],'rejected'=>['#dc2626','#fee2e2'],'cleared'=>['#7c3aed','#ede9fe']];
+                    [$gc2, $gbg2] = $g_colors[$g['status']] ?? ['#64748b','#f1f5f9'];
+                ?>
+                    <div style="border:1px solid #f1f5f9;border-radius:14px;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+                        <div>
+                            <p class="text-sm font-extrabold text-slate-900"><?php echo htmlspecialchars($g['course_title'] ?? 'Unknown Course'); ?></p>
+                            <p class="text-slate-500 text-[11px] mt-0.5"><?php echo htmlspecialchars($g['intended_ceremony']); ?></p>
+                            <?php if (!empty($g['gown_size'])): ?><p class="text-slate-400 text-[11px] mt-0.5">Gown size: <?php echo htmlspecialchars($g['gown_size']); ?></p><?php endif; ?>
+                            <?php if (!empty($g['graduation_date'])): ?>
+                            <p class="text-emerald-600 text-[11px] mt-1 font-black"><i class="fa-solid fa-calendar-check mr-1"></i>Ceremony Date: <?php echo date('d M Y', strtotime($g['graduation_date'])); ?></p>
+                            <?php else: ?>
+                            <p class="text-slate-400 text-[11px] mt-1 italic">Ceremony date not yet set by admin.</p>
+                            <?php endif; ?>
+                            <p class="text-slate-300 text-[10px] mt-1 uppercase font-bold"><?php echo date('d M Y', strtotime($g['created_at'])); ?></p>
+                        </div>
+                        <span style="background:<?php echo $gbg2; ?>;color:<?php echo $gc2; ?>;font-size:10px;font-weight:800;padding:4px 12px;border-radius:20px;text-transform:uppercase;"><?php echo htmlspecialchars($g['status']); ?></span>
+                    </div>
+                <?php endforeach; ?>
+                </div>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div><!-- /view-my-graduation -->
+
     </main><!-- /main content -->
     <div id="chatbot-container">
         <div id="chatbot-window">
@@ -2316,7 +3212,7 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
             targetView.classList.add('active');
 
             // Hide course-viewing-bar for views that don't need it
-            const noBarViews = ['my-results-full', 'my-boarding', 'my-fees'];
+            const noBarViews = ['my-results-full', 'my-boarding', 'my-fees', 'my-details', 'my-refunds', 'my-graduation'];
             const viewingBar = document.getElementById('course-viewing-bar');
             if (viewingBar) {
                 viewingBar.style.display = noBarViews.includes(viewId) ? 'none' : '';
@@ -2326,22 +3222,12 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
             document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('sidebar-active'));
             
             // Add active state to selected sidebar item
-
-            const navIds = ['overview', 'schedule', 'assignments', 'my-units', 'my-results', 'my-attendance', 'my-fees'];
-
-            const navIds = ['overview', 'schedule', 'assignments', 'my-units', 'my-results', 'my-attendance', 'my-fees', 'my-results-full', 'my-boarding'];
-
+            const navIds = ['overview', 'schedule', 'assignments', 'my-units', 'my-results', 'my-attendance', 'my-fees', 'my-results-full', 'my-boarding', 'my-details', 'my-refunds', 'my-graduation'];
             if (navIds.includes(viewId)) {
                 const navEl = document.getElementById('nav-' + viewId);
                 if (navEl) navEl.classList.add('sidebar-active');
             }
             
-
-            // Update Page title
-            const titleEl = document.getElementById('page-title');
-            if (titleEl) {
-                titleEl.innerText = viewId.replace(/-/g, ' ').toUpperCase();
-
             // Update page title
             const titleEl = document.getElementById('page-title');
             if (titleEl) {
@@ -2350,10 +3236,10 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
                     'assignments': 'ASSIGNMENTS', 'my-units': 'MY UNITS',
                     'my-results': 'MY RESULTS', 'my-attendance': 'ATTENDANCE',
                     'my-fees': 'FEES & PAYMENTS', 'my-results-full': 'RESULT SLIP',
-                    'my-boarding': 'MY BOARDING'
+                    'my-boarding': 'MY BOARDING', 'my-details': 'MY DETAILS',
+                    'my-refunds': 'APPLY FOR REFUND', 'my-graduation': 'REGISTER FOR GRADUATION'
                 };
                 titleEl.innerText = titles[viewId] || viewId.replace(/-/g, ' ').toUpperCase();
-
             }
 
             // Save state to local storage so page reloads don't reset to overview
@@ -2376,18 +3262,36 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
             });
         }
 
+        let currentUnitCourseGroup = 'all';
+
         function filterUnitCourse(group, btn) {
+            currentUnitCourseGroup = group;
             document.querySelectorAll('.unit-tab').forEach(t => t.classList.remove('active'));
             btn.classList.add('active');
+            filterUnitsSearch();
+        }
+
+        function filterUnitsSearch() {
+            const q = (document.getElementById('unitsSearchInput')?.value || '').trim().toLowerCase();
+
             document.querySelectorAll('#units-cards-container .unit-card').forEach(card => {
-                if (group === 'all' || card.dataset.course === group) {
-                    card.style.display = '';
-                    card.style.animation = 'none';
-                    card.offsetHeight;
-                    card.style.animation = '';
-                } else {
+                const inCourseGroup = (currentUnitCourseGroup === 'all' || card.dataset.course === currentUnitCourseGroup);
+                if (!inCourseGroup) {
                     card.style.display = 'none';
+                    return;
                 }
+                if (q === '') {
+                    card.style.display = '';
+                    card.querySelectorAll('.unit-row').forEach(row => row.style.display = '');
+                    return;
+                }
+                let anyRowVisible = false;
+                card.querySelectorAll('.unit-row').forEach(row => {
+                    const match = row.dataset.unitName.includes(q);
+                    row.style.display = match ? '' : 'none';
+                    if (match) anyRowVisible = true;
+                });
+                card.style.display = anyRowVisible ? '' : 'none';
             });
         }
 
@@ -2634,7 +3538,10 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
             panel.classList.add('ai-loading');
 
             try {
-                const res  = await fetch('ai_analysis.php?course_id=<?php echo $view_course_id; ?>');
+                const controller = new AbortController();
+                const timeoutId  = setTimeout(() => controller.abort(), 15000); // never hang forever
+                const res  = await fetch('ai_analysis.php?course_id=<?php echo $view_course_id; ?>', { signal: controller.signal });
+                clearTimeout(timeoutId);
                 const json = await res.json();
 
                 if (!json.success || !json.data) throw new Error(json.error || 'No data');
@@ -2732,8 +3639,9 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
         window.addEventListener('DOMContentLoaded', () => {
             loadAIAnalysis();
             
-            // Restore active view on load from LocalStorage
-            const savedTab = localStorage.getItem('active_dashboard_tab') || 'overview';
+            // Restore active view: a ?view= URL param (used after form submits) wins over LocalStorage
+            const urlParams = new URLSearchParams(window.location.search);
+            const savedTab = urlParams.get('view') || localStorage.getItem('active_dashboard_tab') || 'overview';
             switchView(savedTab);
 
             // Animate mastery progress bars: start at 0%, ease to data-target

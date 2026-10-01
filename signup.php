@@ -47,10 +47,19 @@
             <div>
                 <label class="text-[10px] font-black uppercase text-slate-500 tracking-widest mb-1 block">Career Focus</label>
                 <select name="career_path" class="w-full p-3 bg-slate-100 rounded-xl text-sm font-bold text-slate-700 outline-none appearance-none cursor-pointer">
-                    <option value="Software Development">Dev</option>
-                    <option value="Data Science">Data</option>
-                    <option value="AIS">AIS</option>
-                    <option value="Cyber Security">Cyber</option>
+                    <?php
+                    include_once 'config.php';
+                    $signup_courses = mysqli_query($conn, "SELECT id, title FROM courses ORDER BY title ASC");
+                    if ($signup_courses && mysqli_num_rows($signup_courses) > 0):
+                        while ($sc = mysqli_fetch_assoc($signup_courses)):
+                    ?>
+                    <option value="<?php echo intval($sc['id']); ?>"><?php echo htmlspecialchars($sc['title']); ?></option>
+                    <?php
+                        endwhile;
+                    else:
+                    ?>
+                    <option value="">No courses available yet</option>
+                    <?php endif; ?>
                 </select>
             </div>
 

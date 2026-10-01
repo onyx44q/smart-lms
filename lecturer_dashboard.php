@@ -88,6 +88,30 @@ $totalMaterials = mysqli_fetch_assoc(mysqli_query($conn,
 
 $totalCourses = count($lect_course_ids);
 
+// ── MY STUDENTS: every student in the lecturer's courses/units, with the
+//    administrative class (e.g. ST_1) admin has allocated them to ──────────
+$my_students = [];
+if (!empty($lect_course_ids)) {
+    $stu_res = mysqli_query($conn, "
+        SELECT DISTINCT u.id, u.full_name, u.admission_number, u.email, u.career_path,
+               c.title AS course_title,
+               cls.class_code, cls.category AS class_category
+        FROM enrollments e
+        JOIN users u ON u.id = e.student_id
+        JOIN courses c ON c.id = e.course_id
+        LEFT JOIN class_allocations ca ON ca.student_id = u.id AND ca.status = 'active'
+        LEFT JOIN classes cls ON cls.id = ca.class_id
+        WHERE e.course_id IN ($lect_ids_str)
+        ORDER BY u.full_name ASC
+    ");
+    if ($stu_res) while ($sr = mysqli_fetch_assoc($stu_res)) $my_students[] = $sr;
+}
+
+// ── MY ASSIGNED CLASSES/COURSES: what admin has assigned this lecturer to teach ──
+$my_assigned_courses = [];
+$ac_res = mysqli_query($conn, $LECT_COURSE_SQL);
+if ($ac_res) while ($ar = mysqli_fetch_assoc($ac_res)) $my_assigned_courses[] = $ar;
+
 // Avg mastery set from decisionData after getLecturerDecisionData() call below
 $avgMastery = 0; // placeholder — overwritten after $decisionData is populated
 $avgMastery = round(floatval($avgMasteryRes['avg_m'] ?? 0), 1);
@@ -242,6 +266,11 @@ $avgMastery = $decisionData['class_avg'] ?? 0; // combined quiz+exam avg from de
                 <span class="font-medium hidden lg:block group-hover:text-white truncate">Attendance</span>
             </a>
 
+            <a href="?view=students" class="flex items-center space-x-4 p-3 rounded-xl <?php echo (($_GET['view'] ?? '') === 'students') ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : 'text-slate-400 hover:bg-slate-800'; ?> transition group w-full">
+                <i class="fa-solid fa-users text-lg flex-shrink-0 group-hover:text-white"></i>
+                <span class="font-medium hidden lg:block group-hover:text-white truncate">My Students</span>
+            </a>
+
             <div class="w-full">
                 <button onclick="toggleCourseDropdown()" class="w-full flex items-center justify-between p-3 rounded-xl text-slate-400 hover:bg-slate-800 transition group">
                     <div class="flex items-center space-x-4">
@@ -272,6 +301,18 @@ $avgMastery = $decisionData['class_avg'] ?? 0; // combined quiz+exam avg from de
                     <p class="text-[10px] text-slate-500 mt-1 uppercase tracking-widest font-bold">Academic Staff</p>
                 </div>
             </div>
+            <a href="risk_dashboard.php" class="flex items-center space-x-3 p-2.5 rounded-xl hover:bg-violet-500/10 text-violet-400 transition text-xs font-bold w-full">
+                <i class="fa-solid fa-gauge-high text-sm flex-shrink-0"></i>
+                <span class="hidden lg:inline uppercase tracking-tighter">Risk Dashboard</span>
+            </a>
+            <a href="recommendation_evaluation.php" class="flex items-center space-x-3 p-2.5 rounded-xl hover:bg-emerald-500/10 text-emerald-400 transition text-xs font-bold w-full">
+                <i class="fa-solid fa-thumbs-up text-sm flex-shrink-0"></i>
+                <span class="hidden lg:inline uppercase tracking-tighter">Recommendation Evaluation</span>
+            </a>
+            <a href="rule_config.php" class="flex items-center space-x-3 p-2.5 rounded-xl hover:bg-indigo-500/10 text-indigo-400 transition text-xs font-bold w-full">
+                <i class="fa-solid fa-sliders text-sm flex-shrink-0"></i>
+                <span class="hidden lg:inline uppercase tracking-tighter">Rule Configuration</span>
+            </a>
             <a href="apply_leave.php" class="flex items-center space-x-3 p-2.5 rounded-xl hover:bg-amber-500/10 text-amber-400 transition text-xs font-bold w-full">
                 <i class="fa-solid fa-calendar-minus text-sm flex-shrink-0"></i>
                 <span class="hidden lg:inline uppercase tracking-tighter">Apply for Leave</span>
@@ -478,12 +519,16 @@ $avgMastery = $decisionData['class_avg'] ?? 0; // combined quiz+exam avg from de
                         <select name="course_id" class="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-semibold outline-none focus:ring-2 focus:ring-indigo-500 appearance-none">
                             <option value="">— All students (no specific course) —</option>
                             <?php
-                            $cq2 = mysqli_query($conn,
-                                "SELECT DISTINCT id, title FROM courses
-                                 WHERE lecturer_id = $user_id
-                                    OR id = (SELECT course_id FROM users WHERE id = $user_id AND course_id IS NOT NULL LIMIT 1)
-                                 ORDER BY title ASC"
-                            );
+                            // Reuses the shared 3-way lecturer→course query
+                            // ($LECT_COURSE_SQL, defined near the top of this
+                            // file) instead of a separate, narrower query.
+                            // The old query here only checked courses.lecturer_id
+                            // and users.course_id — it missed courses assigned
+                            // via course_units.lecturer_id (unit-level
+                            // assignment), so a lecturer teaching a course only
+                            // through an assigned unit never saw that course in
+                            // this dropdown.
+                            $cq2 = mysqli_query($conn, $LECT_COURSE_SQL);
                             while ($c2 = mysqli_fetch_assoc($cq2))
                                 echo "<option value='{$c2['id']}'>" . htmlspecialchars($c2['title']) . "</option>";
                             ?>
@@ -861,13 +906,20 @@ $avgMastery = $decisionData['class_avg'] ?? 0; // combined quiz+exam avg from de
                         <p class="text-slate-500 font-bold text-sm">No assignments yet. Create your first one.</p>
                     </div>
                     <?php else: ?>
+                    <div class="relative">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-300 text-xs"></i>
+                        <input type="text" onkeyup="genericTableFilter(this,'assignList')" placeholder="Search by title or course…"
+                               class="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold focus:border-indigo-500 focus:outline-none bg-white">
+                    </div>
+                    <div id="assignList" class="space-y-4">
                     <?php foreach ($assign_list as $al):
                         $isOverdue  = $al['due_date'] && strtotime($al['due_date']) < time();
                         $highRisk   = intval($al['high_risk_count'] ?? 0);
                         $subCount   = intval($al['submission_count']);
                         $avgPlag    = floatval($al['avg_plagiarism'] ?? 0);
+                        $al_search  = strtolower($al['title'] . ' ' . $al['course_title']);
                     ?>
-                    <div class="bg-white rounded-2xl border border-slate-100 p-5">
+                    <div class="bg-white rounded-2xl border border-slate-100 p-5" data-search="<?php echo htmlspecialchars($al_search); ?>">
                         <div class="flex items-start justify-between gap-4">
                             <div class="flex-1">
                                 <div class="flex flex-wrap gap-2 mb-1">
@@ -897,6 +949,7 @@ $avgMastery = $decisionData['class_avg'] ?? 0; // combined quiz+exam avg from de
                         </div>
                     </div>
                     <?php endforeach; ?>
+                    </div>
                     <?php endif; ?>
                 </div>
             </div>
@@ -917,20 +970,22 @@ $avgMastery = $decisionData['class_avg'] ?? 0; // combined quiz+exam avg from de
         ] as $tbl) mysqli_query($conn, $tbl);
 
         // ── Which unit is selected? ───────────────────────────────
-        // Lecturer only sees units they are assigned to
+        // Security: lecturers can only grade units they actually teach —
+        // either assigned directly to the unit, or they own the parent course.
         $my_units_res = mysqli_query($conn,
-            "SELECT cu.id, cu.title, cu.unit_code, cu.course_id, c.title AS course_title
+            "SELECT cu.id, cu.title, cu.unit_code, cu.course_id, c.title AS course_title,
+                    (cu.lecturer_id = $user_id) AS is_mine
              FROM course_units cu
              JOIN courses c ON c.id = cu.course_id
-             WHERE cu.lecturer_id = $user_id
-             ORDER BY c.title ASC, cu.title ASC"
+             WHERE cu.lecturer_id = $user_id OR c.lecturer_id = $user_id
+             ORDER BY is_mine DESC, c.title ASC, cu.title ASC"
         );
         $my_units = [];
         while ($u = mysqli_fetch_assoc($my_units_res)) $my_units[] = $u;
 
         $sel_unit_id = isset($_GET['unit_id']) ? intval($_GET['unit_id']) : (count($my_units) > 0 ? $my_units[0]['id'] : 0);
         $sel_unit    = null;
-        foreach ($my_units as $mu) { if ($mu['id'] === $sel_unit_id) { $sel_unit = $mu; break; } }
+        foreach ($my_units as $mu) { if (intval($mu['id']) === intval($sel_unit_id)) { $sel_unit = $mu; break; } }
 
         // ── Assessment components for selected unit ───────────────
         $assessments = [];
@@ -957,13 +1012,23 @@ $avgMastery = $decisionData['class_avg'] ?? 0; // combined quiz+exam avg from de
                      WHERE e.course_id = $parent_course_id"
                 );
             }
-            // Now load all registered students (guaranteed to include everyone enrolled)
+            // Now load all registered students (guaranteed to include everyone enrolled) —
+            // only their LATEST attempt per unit, grouped/ordered by admin-assigned class
+            // so lecturers can quickly locate students by class (e.g. ST_1).
             $sr = mysqli_query($conn,
-                "SELECT u.id, u.full_name, u.email
+                "SELECT u.id, u.full_name, u.email, ur.status, ur.attempt_no,
+                        cls.class_code, cls.category AS class_category
                  FROM unit_registrations ur
                  JOIN users u ON u.id = ur.student_id
+                 LEFT JOIN class_allocations ca ON ca.student_id = u.id AND ca.status = 'active'
+                 LEFT JOIN classes cls ON cls.id = ca.class_id
+                 INNER JOIN (
+                     SELECT student_id, MAX(attempt_no) AS max_attempt
+                     FROM unit_registrations WHERE unit_id = $sel_unit_id
+                     GROUP BY student_id
+                 ) latest ON latest.student_id = ur.student_id AND latest.max_attempt = ur.attempt_no
                  WHERE ur.unit_id = $sel_unit_id
-                 ORDER BY u.full_name ASC"
+                 ORDER BY COALESCE(cls.class_code, 'ZZZ') ASC, u.full_name ASC"
             );
             while ($s = mysqli_fetch_assoc($sr)) $reg_students[] = $s;
         }
@@ -1025,7 +1090,7 @@ $avgMastery = $decisionData['class_avg'] ?? 0; // combined quiz+exam avg from de
                 <?php if ($umsg): ?>
                 <div class="border rounded-xl px-4 py-2.5 text-xs font-black uppercase <?php echo $umsg === 'saved' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : ($umsg === 'assess_added' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-red-50 text-red-600 border-red-200'); ?>">
                     <i class="fa-solid <?php echo $umsg === 'saved' ? 'fa-check' : ($umsg === 'assess_added' ? 'fa-list-check' : 'fa-triangle-exclamation'); ?> mr-1"></i>
-                    <?php echo match($umsg) { 'saved'=>"Marks saved ($ucount entries).", 'assess_added'=>'Assessment added.', 'assess_deleted'=>'Assessment deleted.', 'unauthorized'=>'Access denied.', default=>'Done.' }; ?>
+                    <?php echo match($umsg) { 'saved'=>"Marks saved ($ucount entries).", 'assess_added'=>'Assessment added.', 'assess_deleted'=>'Assessment deleted.', 'unauthorized'=>'Access denied.', 'status_set'=>'Unit status updated.', 'status_error'=>'Status update failed — please run fix_unit_status.php or contact admin.', 'status_denied'=>'You are not assigned to this unit, so the status could not be changed.', default=>'Done.' }; ?>
                 </div>
                 <?php endif; ?>
             </div>
@@ -1034,8 +1099,8 @@ $avgMastery = $decisionData['class_avg'] ?? 0; // combined quiz+exam avg from de
             <?php if (empty($my_units)): ?>
             <div class="bg-white rounded-2xl border border-slate-100 p-14 text-center">
                 <i class="fa-solid fa-layer-group text-slate-200 text-4xl mb-3"></i>
-                <p class="text-slate-600 font-bold text-sm">No units assigned to you yet.</p>
-                <p class="text-slate-400 text-xs mt-1">Ask your admin to assign you to a unit in Course Catalog.</p>
+                <p class="text-slate-600 font-bold text-sm">No units exist in the system yet.</p>
+                <p class="text-slate-400 text-xs mt-1">Ask your admin to add units in Course Catalog.</p>
             </div>
             <?php else: ?>
 
@@ -1050,7 +1115,7 @@ $avgMastery = $decisionData['class_avg'] ?? 0; // combined quiz+exam avg from de
                     <p class="text-[9px] font-black uppercase text-slate-400 tracking-widest mb-2"><?php echo htmlspecialchars($cname); ?></p>
                     <div class="flex flex-wrap gap-2">
                         <?php foreach ($cunits as $mu):
-                            $isAct = $mu['id'] === $sel_unit_id;
+                            $isAct = intval($mu['id']) === intval($sel_unit_id);
                         ?>
                         <a href="?view=marks&unit_id=<?php echo $mu['id']; ?>"
                            class="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all
@@ -1058,6 +1123,7 @@ $avgMastery = $decisionData['class_avg'] ?? 0; // combined quiz+exam avg from de
                             <i class="fa-solid fa-book"></i>
                             <?php echo htmlspecialchars($mu['title']); ?>
                             <?php if ($mu['unit_code']): ?><span class="opacity-60 font-medium"><?php echo htmlspecialchars($mu['unit_code']); ?></span><?php endif; ?>
+                            <?php if (!$mu['is_mine']): ?><span class="opacity-60 font-medium text-[9px]">· other lecturer's unit</span><?php endif; ?>
                         </a>
                         <?php endforeach; ?>
                     </div>
@@ -1205,11 +1271,20 @@ $avgMastery = $decisionData['class_avg'] ?? 0; // combined quiz+exam avg from de
                             </button>
                         </div>
 
+                        <div class="px-6 py-3 border-b border-slate-100">
+                            <div class="relative max-w-sm">
+                                <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-300 text-xs"></i>
+                                <input type="text" onkeyup="genericTableFilter(this,'marksTable')" placeholder="Search by student name…"
+                                       class="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold focus:border-indigo-500 focus:outline-none">
+                            </div>
+                        </div>
+
                         <div class="overflow-x-auto">
-                        <table class="w-full text-left">
+                        <table class="w-full text-left" id="marksTable">
                             <thead class="border-b border-slate-100">
                                 <tr>
                                     <th class="text-[9px] font-black uppercase text-slate-400 tracking-widest px-5 py-3 w-52">Student</th>
+                                    <th class="text-[9px] font-black uppercase text-slate-400 tracking-widest px-3 py-3 text-center">Class</th>
                                     <?php foreach ($assessments as $ass):
                                         $thColor = $ass['type'] === 'exam' ? 'text-red-500' : 'text-blue-500';
                                     ?>
@@ -1221,6 +1296,7 @@ $avgMastery = $decisionData['class_avg'] ?? 0; // combined quiz+exam avg from de
                                     <th class="text-[9px] font-black uppercase text-slate-400 tracking-widest px-4 py-3 text-center">Final %</th>
                                     <th class="text-[9px] font-black uppercase text-slate-400 tracking-widest px-4 py-3 text-center">Grade</th>
                                     <th class="text-[9px] font-black uppercase text-slate-400 tracking-widest px-4 py-3">Remarks</th>
+                                    <th class="text-[9px] font-black uppercase text-slate-400 tracking-widest px-4 py-3 text-center">Unit Status</th>
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-50" id="marksTableBody">
@@ -1237,7 +1313,7 @@ $avgMastery = $decisionData['class_avg'] ?? 0; // combined quiz+exam avg from de
                                     }
                                 }
                             ?>
-                            <tr class="hover:bg-slate-50/60 transition-colors" data-row="<?php echo $i; ?>" data-max="<?php echo array_sum(array_column($assessments,'max_mark')); ?>">
+                            <tr class="hover:bg-slate-50/60 transition-colors" data-row="<?php echo $i; ?>" data-max="<?php echo array_sum(array_column($assessments,'max_mark')); ?>" data-search="<?php echo htmlspecialchars(strtolower($stu['full_name'])); ?>">
                                 <td class="px-5 py-3">
                                     <div class="flex items-center space-x-3">
                                         <div class="w-8 h-8 bg-gradient-to-tr from-indigo-400 to-purple-400 rounded-full flex items-center justify-center flex-shrink-0">
@@ -1248,6 +1324,13 @@ $avgMastery = $decisionData['class_avg'] ?? 0; // combined quiz+exam avg from de
                                             <p class="text-[9px] text-slate-400"><?php echo htmlspecialchars($stu['email']); ?></p>
                                         </div>
                                     </div>
+                                </td>
+                                <td class="px-3 py-3 text-center">
+                                    <?php if (!empty($stu['class_code'])): ?>
+                                    <span style="background:#eef2ff;color:#4338ca;font-size:10px;font-weight:800;padding:3px 9px;border-radius:8px;"><?php echo htmlspecialchars($stu['class_code']); ?></span>
+                                    <?php else: ?>
+                                    <span style="color:#cbd5e1;font-size:10px;">—</span>
+                                    <?php endif; ?>
                                 </td>
                                 <?php foreach ($assessments as $ass):
                                     $existing = $marks_matrix[$ass['id']][$sid]['mark'] ?? '';
@@ -1286,6 +1369,21 @@ $avgMastery = $decisionData['class_avg'] ?? 0; // combined quiz+exam avg from de
                                            placeholder="Optional note…"
                                            maxlength="120"
                                            class="w-36 p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold outline-none focus:ring-2 focus:ring-indigo-300 transition-all">
+                                </td>
+                                <!-- Unit Status (pass/fail) -->
+                                <td class="px-4 py-3 text-center">
+                                    <select name="new_status"
+                                            data-unit-id="<?php echo $sel_unit_id; ?>"
+                                            data-student-id="<?php echo $sid; ?>"
+                                            onchange="submitUnitStatus(this)"
+                                            style="font-size:10px;font-weight:800;padding:5px 8px;border-radius:8px;border:1px solid <?php echo $stu['status']==='passed'?'#a7f3d0':($stu['status']==='failed'?'#fecaca':'#e2e8f0'); ?>;background:<?php echo $stu['status']==='passed'?'#ecfdf5':($stu['status']==='failed'?'#fef2f2':'#f8fafc'); ?>;color:<?php echo $stu['status']==='passed'?'#059669':($stu['status']==='failed'?'#dc2626':'#64748b'); ?>;">
+                                        <option value="active" <?php echo $stu['status']==='active'?'selected':''; ?>>In Progress</option>
+                                        <option value="passed" <?php echo $stu['status']==='passed'?'selected':''; ?>>Passed</option>
+                                        <option value="failed" <?php echo $stu['status']==='failed'?'selected':''; ?>>Failed</option>
+                                    </select>
+                                    <?php if (intval($stu['attempt_no']) > 1): ?>
+                                    <p style="font-size:9px;color:#94a3b8;margin-top:3px;">Attempt #<?php echo intval($stu['attempt_no']); ?></p>
+                                    <?php endif; ?>
                                 </td>
                             </tr>
                             <?php endforeach; ?>
@@ -1358,6 +1456,41 @@ $avgMastery = $decisionData['class_avg'] ?? 0; // combined quiz+exam avg from de
             gEl.textContent = letter;
             gEl.className = `inline-block border px-2.5 py-1 rounded-xl text-xs font-black ${cls}`;
         }
+
+        // Submits a unit-status change via a standalone form (never nested
+        // inside the marks form, so it can't corrupt that form's fields).
+        function submitUnitStatus(selectEl) {
+            const f = document.createElement('form');
+            f.method = 'POST';
+            f.action = 'unit_actions.php';
+            f.style.display = 'none';
+
+            const fields = {
+                action: 'set_unit_status',
+                unit_id: selectEl.dataset.unitId,
+                student_id: selectEl.dataset.studentId,
+                new_status: selectEl.value
+            };
+            for (const [name, value] of Object.entries(fields)) {
+                const inp = document.createElement('input');
+                inp.type = 'hidden';
+                inp.name = name;
+                inp.value = value;
+                f.appendChild(inp);
+            }
+            document.body.appendChild(f);
+            f.submit();
+        }
+
+        // Shared live search filter: hides rows/cards whose data-search
+        // attribute doesn't contain the typed query. Used across Marks
+        // Manager, Assignments, Attendance and My Students.
+        function genericTableFilter(inputEl, containerId) {
+            const q = inputEl.value.toLowerCase();
+            document.querySelectorAll('#' + containerId + ' [data-search]').forEach(el => {
+                el.style.display = el.dataset.search.includes(q) ? '' : 'none';
+            });
+        }
         </script>
 
         <?php elseif(($_GET['view'] ?? '') === 'attendance'):
@@ -1393,7 +1526,7 @@ $avgMastery = $decisionData['class_avg'] ?? 0; // combined quiz+exam avg from de
 
         $att_unit_id = isset($_GET['att_unit']) ? intval($_GET['att_unit']) : (count($att_units) > 0 ? $att_units[0]['id'] : 0);
         $att_sel_unit = null;
-        foreach ($att_units as $au) { if ($au['id'] === $att_unit_id) { $att_sel_unit = $au; break; } }
+        foreach ($att_units as $au) { if (intval($au['id']) === intval($att_unit_id)) { $att_sel_unit = $au; break; } }
 
         // Sessions for the selected unit
         $att_sessions = [];
@@ -1458,7 +1591,7 @@ $avgMastery = $decisionData['class_avg'] ?? 0; // combined quiz+exam avg from de
             <div class="flex flex-wrap gap-2 mb-7">
                 <?php foreach ($att_units as $au): ?>
                 <a href="?view=attendance&att_unit=<?php echo $au['id']; ?>"
-                   class="px-4 py-2 rounded-xl text-xs font-black uppercase border transition-all <?php echo $au['id'] === $att_unit_id ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-200' : 'bg-white text-slate-500 border-slate-200 hover:border-indigo-300 hover:text-indigo-600'; ?>">
+                   class="px-4 py-2 rounded-xl text-xs font-black uppercase border transition-all <?php echo intval($au['id']) === intval($att_unit_id) ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-200' : 'bg-white text-slate-500 border-slate-200 hover:border-indigo-300 hover:text-indigo-600'; ?>">
                     <?php echo htmlspecialchars($au['unit_code'] ? $au['unit_code'].' — '.$au['title'] : $au['title']); ?>
                 </a>
                 <?php endforeach; ?>
@@ -1564,7 +1697,14 @@ $avgMastery = $decisionData['class_avg'] ?? 0; // combined quiz+exam avg from de
                             <?php if (empty($att_summary)): ?>
                             <p class="text-slate-400 text-xs text-center py-8 italic">No students registered for this unit.</p>
                             <?php else: ?>
-                            <table class="w-full text-left text-sm">
+                            <div class="px-6 py-3 border-b border-slate-100">
+                                <div class="relative max-w-sm">
+                                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-300 text-xs"></i>
+                                    <input type="text" onkeyup="genericTableFilter(this,'attSummaryTable')" placeholder="Search by student name…"
+                                           class="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold focus:border-indigo-500 focus:outline-none">
+                                </div>
+                            </div>
+                            <table class="w-full text-left text-sm" id="attSummaryTable">
                                 <thead>
                                     <tr class="bg-slate-50 text-[10px] font-black uppercase text-slate-400">
                                         <th class="px-6 py-3">Student</th>
@@ -1578,7 +1718,7 @@ $avgMastery = $decisionData['class_avg'] ?? 0; // combined quiz+exam avg from de
                                 <tbody class="divide-y divide-slate-50">
                                 <?php foreach ($att_summary as $astu): ?>
                                 <?php $pct = floatval($astu['absence_pct'] ?? 0); ?>
-                                <tr class="hover:bg-slate-50 transition-colors <?php echo $astu['barred'] ? 'bg-red-50/50' : ''; ?>">
+                                <tr class="hover:bg-slate-50 transition-colors <?php echo $astu['barred'] ? 'bg-red-50/50' : ''; ?>" data-search="<?php echo htmlspecialchars(strtolower($astu['full_name'])); ?>">
                                     <td class="px-6 py-3 font-bold text-slate-800 text-sm"><?php echo htmlspecialchars($astu['full_name']); ?></td>
                                     <td class="px-4 py-3 text-center text-slate-600 text-xs"><?php echo intval($astu['total_sessions']); ?></td>
                                     <td class="px-4 py-3 text-center text-emerald-600 font-bold text-xs"><?php echo intval($astu['attended']); ?></td>
@@ -1748,6 +1888,90 @@ $avgMastery = $decisionData['class_avg'] ?? 0; // combined quiz+exam avg from de
         }
         </script>
 
+        <?php elseif(($_GET['view'] ?? '') === 'students'): ?>
+
+            <!-- ══ MY STUDENTS + ASSIGNED CLASSES ══ -->
+            <div class="mb-8">
+                <h2 class="text-xl font-black text-slate-900">My Students</h2>
+                <p class="text-slate-500 text-sm mt-1">Everyone enrolled in the courses you've been assigned to teach, grouped by their administrative class.</p>
+            </div>
+
+            <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 mb-8">
+                <h3 class="text-xs font-black uppercase text-slate-400 tracking-widest mb-4">Courses You're Assigned to Teach</h3>
+                <?php if (empty($my_assigned_courses)): ?>
+                <p class="text-slate-400 text-sm">You have not been assigned to teach any courses yet — contact your administrator.</p>
+                <?php else: ?>
+                <div class="flex flex-wrap gap-3">
+                    <?php foreach ($my_assigned_courses as $mac): ?>
+                    <span style="background:#eef2ff;color:#4338ca;border:1px solid #e0e7ff;padding:8px 16px;border-radius:12px;font-size:12px;font-weight:800;">
+                        <i class="fa-solid fa-chalkboard-user mr-1.5"></i><?php echo htmlspecialchars($mac['title']); ?>
+                    </span>
+                    <?php endforeach; ?>
+                </div>
+                <?php endif; ?>
+            </div>
+
+            <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                    <h3 class="text-xs font-black uppercase text-slate-400 tracking-widest">All Students (<?php echo count($my_students); ?>)</h3>
+                </div>
+                <?php if (empty($my_students)): ?>
+                <p class="text-slate-400 text-sm text-center py-12">No students enrolled in your courses yet.</p>
+                <?php else: ?>
+                <div class="px-6 py-3 border-b border-slate-100">
+                    <div class="relative max-w-sm">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-300 text-xs"></i>
+                        <input type="text" onkeyup="genericTableFilter(this,'studentsTable')" placeholder="Search by name, admission no., or course…"
+                               class="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold focus:border-indigo-500 focus:outline-none">
+                    </div>
+                </div>
+                <div class="overflow-x-auto">
+                <table class="w-full text-left" id="studentsTable">
+                    <thead class="border-b border-slate-100 bg-slate-50">
+                        <tr>
+                            <th class="text-[9px] font-black uppercase text-slate-400 tracking-widest px-5 py-3">Student</th>
+                            <th class="text-[9px] font-black uppercase text-slate-400 tracking-widest px-4 py-3">Admission No.</th>
+                            <th class="text-[9px] font-black uppercase text-slate-400 tracking-widest px-4 py-3">Class</th>
+                            <th class="text-[9px] font-black uppercase text-slate-400 tracking-widest px-4 py-3">Course</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-50">
+                    <?php
+                    // Sort by class code so students are grouped/ordered by class
+                    usort($my_students, fn($a,$b) => strcmp($a['class_code'] ?? 'ZZZ', $b['class_code'] ?? 'ZZZ') ?: strcmp($a['full_name'],$b['full_name']));
+                    foreach ($my_students as $ms):
+                        $ms_search = strtolower($ms['full_name'] . ' ' . ($ms['admission_number'] ?? '') . ' ' . ($ms['class_code'] ?? '') . ' ' . ($ms['course_title'] ?? ''));
+                    ?>
+                        <tr class="hover:bg-slate-50/60 transition-colors" data-search="<?php echo htmlspecialchars($ms_search); ?>">
+                            <td class="px-5 py-3">
+                                <div class="flex items-center space-x-3">
+                                    <div class="w-8 h-8 bg-gradient-to-tr from-indigo-400 to-purple-400 rounded-full flex items-center justify-center flex-shrink-0">
+                                        <span class="text-white text-[9px] font-black"><?php echo strtoupper(mb_substr($ms['full_name'],0,2)); ?></span>
+                                    </div>
+                                    <div>
+                                        <p class="text-xs font-black text-slate-800"><?php echo htmlspecialchars($ms['full_name']); ?></p>
+                                        <p class="text-[9px] text-slate-400"><?php echo htmlspecialchars($ms['email']); ?></p>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="px-4 py-3 text-xs font-mono font-bold text-slate-600"><?php echo htmlspecialchars($ms['admission_number'] ?? '—'); ?></td>
+                            <td class="px-4 py-3">
+                                <?php if (!empty($ms['class_code'])): ?>
+                                <span style="background:#eef2ff;color:#4338ca;font-size:10px;font-weight:800;padding:3px 9px;border-radius:8px;"><?php echo htmlspecialchars($ms['class_code']); ?></span>
+                                <span style="color:#94a3b8;font-size:10px;margin-left:4px;"><?php echo htmlspecialchars($ms['class_category'] ?? ''); ?></span>
+                                <?php else: ?>
+                                <span style="color:#cbd5e1;font-size:11px;">Not allocated</span>
+                                <?php endif; ?>
+                            </td>
+                            <td class="px-4 py-3 text-xs font-semibold text-slate-600"><?php echo htmlspecialchars($ms['course_title']); ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+                </div>
+                <?php endif; ?>
+            </div>
+
         <?php else: ?>
 
             <!-- Quick Stats -->
@@ -1915,15 +2139,23 @@ $avgMastery = $decisionData['class_avg'] ?? 0; // combined quiz+exam avg from de
                         <?php foreach ($classSumm as $cs):
                             $hColor = $cs['health'] === 'good' ? 'border-emerald-500/40 bg-emerald-500/5'
                                     : ($cs['health'] === 'moderate' ? 'border-amber-500/40 bg-amber-500/5'
-                                    : 'border-red-500/40 bg-red-500/5');
+                                    : ($cs['health'] === 'no_activity' ? 'border-slate-500/40 bg-slate-500/5'
+                                    : 'border-red-500/40 bg-red-500/5'));
                             $hLabel = $cs['health'] === 'good' ? 'text-emerald-400'
-                                    : ($cs['health'] === 'moderate' ? 'text-amber-400' : 'text-red-400');
+                                    : ($cs['health'] === 'moderate' ? 'text-amber-400'
+                                    : ($cs['health'] === 'no_activity' ? 'text-slate-400' : 'text-red-400'));
+                            $hText  = $cs['health'] === 'no_activity' ? 'no activity yet' : $cs['health'];
                         ?>
                         <div class="border <?php echo $hColor; ?> rounded-2xl p-4">
-                            <p class="text-[9px] font-black uppercase <?php echo $hLabel; ?>"><?php echo $cs['health']; ?></p>
+                            <p class="text-[9px] font-black uppercase <?php echo $hLabel; ?>"><?php echo htmlspecialchars($hText); ?></p>
                             <p class="text-slate-200 font-bold text-sm mt-1"><?php echo htmlspecialchars($cs['title']); ?></p>
                             <p class="text-slate-400 text-[10px] mt-1">
-                                <?php echo $cs['enrolled']; ?> enrolled &nbsp;·&nbsp; quiz avg <?php echo $cs['avg_mastery']; ?>%<?php if ($cs['avg_exam'] !== null): ?> &nbsp;·&nbsp; exam <?php echo $cs['avg_exam']; ?>%<?php endif; ?>
+                                <?php echo $cs['enrolled']; ?> enrolled
+                                <?php if ($cs['has_activity']): ?>
+                                    &nbsp;·&nbsp; quiz avg <?php echo $cs['avg_mastery'] !== null ? $cs['avg_mastery'] . '%' : '—'; ?><?php if ($cs['avg_exam'] !== null): ?> &nbsp;·&nbsp; exam <?php echo $cs['avg_exam']; ?>%<?php endif; ?>
+                                <?php else: ?>
+                                    &nbsp;·&nbsp; no quizzes or marks recorded in this course yet
+                                <?php endif; ?>
                             </p>
                         </div>
                         <?php endforeach; ?>
@@ -1963,12 +2195,15 @@ $avgMastery = $decisionData['class_avg'] ?? 0; // combined quiz+exam avg from de
 
                     <!-- At-Risk Students -->
                     <div class="bg-white/5 rounded-2xl p-4">
-                        <p class="text-[9px] font-black uppercase text-amber-400 tracking-widest mb-3">
-                            <i class="fa-solid fa-circle-exclamation mr-1"></i>
-                            At-Risk Students
-                            <?php if ($totalAtRisk > 0): ?>
-                                <span class="bg-red-500 text-white text-[8px] px-1.5 py-0.5 rounded-full ml-1"><?php echo $totalAtRisk; ?></span>
-                            <?php endif; ?>
+                        <p class="text-[9px] font-black uppercase text-amber-400 tracking-widest mb-3 flex items-center justify-between">
+                            <span>
+                                <i class="fa-solid fa-circle-exclamation mr-1"></i>
+                                At-Risk Students
+                                <?php if ($totalAtRisk > 0): ?>
+                                    <span class="bg-red-500 text-white text-[8px] px-1.5 py-0.5 rounded-full ml-1"><?php echo $totalAtRisk; ?></span>
+                                <?php endif; ?>
+                            </span>
+                            <a href="risk_dashboard.php" class="text-[8px] text-indigo-300 hover:text-indigo-100 normal-case font-bold">View All →</a>
                         </p>
                         <?php if (!empty($atRisk)): ?>
                             <div class="space-y-2">

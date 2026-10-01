@@ -60,9 +60,11 @@ if ($action === 'create_session' && $user_role === 'lecturer') {
         exit();
     }
 
-    // Verify lecturer owns this unit
+    // Verify lecturer owns this unit (directly, or owns the parent course)
     $check = mysqli_query($conn,
-        "SELECT id FROM course_units WHERE id = $unit_id AND lecturer_id = $user_id"
+        "SELECT cu.id FROM course_units cu
+         JOIN courses c ON c.id = cu.course_id
+         WHERE cu.id = $unit_id AND (cu.lecturer_id = $user_id OR c.lecturer_id = $user_id)"
     );
     if (!mysqli_num_rows($check)) {
         echo json_encode(['success' => false, 'error' => 'Unit not assigned to you']);

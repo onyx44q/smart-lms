@@ -19,10 +19,12 @@ $action  = $_POST['action'] ?? '';
 $unit_id = intval($_POST['unit_id'] ?? 0);
 $redirect = "lecturer_dashboard.php?view=marks&unit_id=$unit_id";
 
-// Verify lecturer teaches this unit
+// Security: a lecturer may only enter marks for units they actually teach —
+// either assigned directly to the unit, or they own the parent course.
 $unit = mysqli_fetch_assoc(mysqli_query($conn,
     "SELECT cu.id, cu.title, cu.course_id FROM course_units cu
-     WHERE cu.id = $unit_id AND cu.lecturer_id = $user_id"
+     JOIN courses c ON c.id = cu.course_id
+     WHERE cu.id = $unit_id AND (cu.lecturer_id = $user_id OR c.lecturer_id = $user_id)"
 ));
 if (!$unit) {
     header("Location: $redirect&umsg=unauthorized");

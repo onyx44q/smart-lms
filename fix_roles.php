@@ -1,14 +1,15 @@
 <?php
 /**
- * SmartLMS — Fix New Role Accounts
- * Run this ONCE in your browser: http://yoursite/fix_roles.php
+ * SmartLMS — Fix Role Accounts (Boarding Master + HR Manager)
+ * Run this ONCE in your browser after any database re-import:
+ *   http://localhost/smart%20lms/fix_roles.php
  * Then DELETE this file immediately after.
  */
 include 'config.php';
 
 $results = [];
 
-// ── Step 1: Extend role ENUM ─────────────────────────────────────────
+// ── Step 1: Extend role ENUM (safe if already done) ──────────────────
 $alter = mysqli_query($conn,
     "ALTER TABLE `users`
      MODIFY COLUMN `role`
@@ -17,20 +18,23 @@ $alter = mysqli_query($conn,
 );
 $results[] = ['Extend role ENUM', $alter ? '✅ Done' : '⚠ ' . mysqli_error($conn)];
 
-// ── Step 2: Hash for "password123" (PHP bcrypt) ──────────────────────
-$hash = password_hash('password123', PASSWORD_BCRYPT);
+// ── Step 2: Ensure admission_number column exists (used elsewhere) ───
+@mysqli_query($conn, "ALTER TABLE users ADD COLUMN `admission_number` VARCHAR(30) DEFAULT NULL AFTER `email`");
+@mysqli_query($conn, "ALTER TABLE users ADD UNIQUE KEY `uq_admission_number` (`admission_number`)");
 
-// ── Step 3: Boarding Master account ─────────────────────────────────
-// Delete old broken record first (wrong hash), then re-insert cleanly
+// ── Step 3: Fresh PHP-generated bcrypt hash for "password123" ────────
+$hash1 = password_hash('password123', PASSWORD_BCRYPT);
+$hash2 = password_hash('password123', PASSWORD_BCRYPT);
+
+// ── Step 4: Boarding Master account — delete any broken copy, recreate ──
 mysqli_query($conn, "DELETE FROM `users` WHERE `email`='boarding@smartlms.com'");
 $r1 = mysqli_query($conn,
     "INSERT INTO `users` (`full_name`, `email`, `password`, `role`)
-     VALUES ('Boarding Master', 'boarding@smartlms.com', '" . mysqli_real_escape_string($conn,$hash) . "', 'boarding_master')"
+     VALUES ('Boarding Master', 'boarding@smartlms.com', '" . mysqli_real_escape_string($conn,$hash1) . "', 'boarding_master')"
 );
 $results[] = ['Create boarding@smartlms.com', $r1 ? '✅ Created (pw: password123)' : '❌ ' . mysqli_error($conn)];
 
-// ── Step 4: HR Manager account ───────────────────────────────────────
-$hash2 = password_hash('password123', PASSWORD_BCRYPT);
+// ── Step 5: HR Manager account — delete any broken copy, recreate ────
 mysqli_query($conn, "DELETE FROM `users` WHERE `email`='hr@smartlms.com'");
 $r2 = mysqli_query($conn,
     "INSERT INTO `users` (`full_name`, `email`, `password`, `role`)
@@ -38,25 +42,20 @@ $r2 = mysqli_query($conn,
 );
 $results[] = ['Create hr@smartlms.com', $r2 ? '✅ Created (pw: password123)' : '❌ ' . mysqli_error($conn)];
 
-// ── Step 5: Verify the accounts were created correctly ───────────────
+// ── Step 6: Verify both accounts actually pass password_verify() ─────
 $verify_res = mysqli_query($conn,
-    "SELECT id, full_name, email, role, LEFT(password,7) AS hash_prefix
+    "SELECT id, full_name, email, role, LEFT(password,7) AS hash_prefix, password
      FROM users WHERE email IN ('boarding@smartlms.com','hr@smartlms.com')"
 );
 $verified = [];
 while ($v = mysqli_fetch_assoc($verify_res)) {
-    $pw_ok = password_verify('password123', 
-        mysqli_fetch_assoc(mysqli_query($conn, "SELECT password FROM users WHERE id={$v['id']}"))['password']
-    );
-    $verified[] = $v + ['password_check' => $pw_ok ? '✅ password123 works' : '❌ mismatch'];
+    $pw_ok = password_verify('password123', $v['password']);
+    $verified[] = [
+        'id' => $v['id'], 'full_name' => $v['full_name'], 'email' => $v['email'],
+        'role' => $v['role'], 'hash_prefix' => $v['hash_prefix'],
+        'password_check' => $pw_ok ? '✅ password123 works' : '❌ mismatch'
+    ];
 }
-
-// ── Step 6: Also fix process_login.php to allow new roles ────────────
-$login_file = __DIR__ . '/process_login.php';
-$login_src  = file_get_contents($login_file);
-$role_check_ok = strpos($login_src, 'boarding_master') !== false;
-$results[] = ['process_login.php has new roles', $role_check_ok ? '✅ Already patched' : '⚠ Needs update — upload the new process_login.php'];
-
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -82,7 +81,7 @@ $results[] = ['process_login.php has new roles', $role_check_ok ? '✅ Already p
 <body>
 
 <h1>🔧 SmartLMS Role Account Fix</h1>
-<p class="sub">Setting up Boarding Master and HR Manager accounts with correct password hashing</p>
+<p class="sub">Re-creates Boarding Master and HR Manager accounts with a correct password hash — run this any time the database gets re-imported.</p>
 
 <div class="card">
     <h2>Fix Steps</h2>
@@ -104,7 +103,7 @@ $results[] = ['process_login.php has new roles', $role_check_ok ? '✅ Already p
 <div class="card">
     <h2>Account Verification</h2>
     <?php if (empty($verified)): ?>
-    <p class="err">❌ No accounts found — something went wrong. Check MySQL error above.</p>
+    <p class="err">❌ No accounts found — something went wrong. Check the MySQL error above.</p>
     <?php else: ?>
     <table>
         <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Role</th><th>Hash Prefix</th><th>Password Test</th></tr></thead>
@@ -137,60 +136,9 @@ $results[] = ['process_login.php has new roles', $role_check_ok ? '✅ Already p
         Role: HR Manager
     </div>
     <div class="warn-box">
-        ⚠ <strong>Security:</strong> Delete this file immediately after use — <code>fix_roles.php</code>
+        ⚠ <strong>Security:</strong> Delete this file (<code>fix_roles.php</code>) from your server right after confirming login works.
         <br>Then change these passwords from inside each dashboard.
     </div>
-</div>
-
-<?php
-// ── Extra: also allow creating custom accounts ────────────────────────
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_POST['new_email'])) {
-    $ne   = mysqli_real_escape_string($conn, trim($_POST['new_email']));
-    $nn   = mysqli_real_escape_string($conn, trim($_POST['new_name']));
-    $nr   = mysqli_real_escape_string($conn, $_POST['new_role']);
-    $npw  = trim($_POST['new_password']);
-    $nph  = mysqli_real_escape_string($conn, password_hash($npw, PASSWORD_BCRYPT));
-    mysqli_query($conn, "DELETE FROM users WHERE email='$ne'");
-    $nr2 = mysqli_query($conn, "INSERT INTO users (full_name,email,password,role) VALUES ('$nn','$ne','$nph','$nr')");
-    echo '<div class="card" style="border-color:'.($nr2?'#10b981':'#ef4444').'"><h2>'.($nr2?'✅ Account Created':'❌ Failed').'</h2>';
-    echo $nr2 ? "<p>$nn &lt;$ne&gt; created with role <strong>$nr</strong> and your chosen password.</p>"
-              : '<p>Error: '.htmlspecialchars(mysqli_error($conn)).'</p>';
-    echo '</div>';
-}
-?>
-
-<div class="card" style="border-color:#334155;">
-    <h2>➕ Create Additional Account (Optional)</h2>
-    <form method="POST" style="display:grid;gap:10px;">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-            <div>
-                <label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:5px;">Full Name</label>
-                <input type="text" name="new_name" placeholder="Jane Wambua" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:7px;padding:9px 12px;color:#e2e8f0;font-size:13px;">
-            </div>
-            <div>
-                <label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:5px;">Email</label>
-                <input type="email" name="new_email" placeholder="jane@school.ac.ke" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:7px;padding:9px 12px;color:#e2e8f0;font-size:13px;">
-            </div>
-            <div>
-                <label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:5px;">Role</label>
-                <select name="new_role" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:7px;padding:9px 12px;color:#e2e8f0;font-size:13px;">
-                    <option value="boarding_master">Boarding Master</option>
-                    <option value="hr_manager">HR Manager</option>
-                    <option value="financial_accountant">Financial Accountant</option>
-                    <option value="admin">Admin</option>
-                    <option value="lecturer">Lecturer</option>
-                    <option value="student">Student</option>
-                </select>
-            </div>
-            <div>
-                <label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:5px;">Password</label>
-                <input type="password" name="new_password" placeholder="Min 8 characters" style="width:100%;background:#0f172a;border:1px solid #334155;border-radius:7px;padding:9px 12px;color:#e2e8f0;font-size:13px;">
-            </div>
-        </div>
-        <button type="submit" style="background:#f59e0b;color:#0f172a;border:none;border-radius:8px;padding:10px 24px;font-size:13px;font-weight:800;cursor:pointer;justify-self:start;">
-            Create Account
-        </button>
-    </form>
 </div>
 
 </body>

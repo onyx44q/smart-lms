@@ -23,9 +23,14 @@ if ($quiz_id === 0) {
 
 $res = mysqli_query($conn,
     "SELECT id, question_text, option_a, option_b, option_c, option_d,
-            correct_option, explanation, difficulty_level
+            correct_option, explanation
      FROM questions WHERE quiz_id = $quiz_id ORDER BY id ASC"
 );
+
+if (!$res) {
+    echo json_encode(['error' => 'Query failed: ' . mysqli_error($conn), 'questions' => []]);
+    exit();
+}
 
 $questions = [];
 while ($q = mysqli_fetch_assoc($res)) {

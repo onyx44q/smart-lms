@@ -77,6 +77,10 @@ $filter = $_GET['filter'] ?? 'all';
                 <i class="fa-solid fa-book-open w-4"></i>
                 <span class="text-sm font-bold">Course Catalog</span>
             </a>
+            <a href="?view=classes" class="flex items-center space-x-3 p-3 rounded-xl transition-all <?php echo $view == 'classes' ? 'bg-blue-600 shadow-lg shadow-blue-600/30' : 'hover:bg-slate-800 text-slate-400'; ?>">
+                <i class="fa-solid fa-people-roof w-4"></i>
+                <span class="text-sm font-bold">Classes</span>
+            </a>
             <a href="?view=marks" class="flex items-center space-x-3 p-3 rounded-xl transition-all <?php echo $view == 'marks' ? 'bg-blue-600 shadow-lg shadow-blue-600/30' : 'hover:bg-slate-800 text-slate-400'; ?>">
                 <i class="fa-solid fa-clipboard-list w-4"></i>
                 <span class="text-sm font-bold">Student Marks</span>
@@ -84,6 +88,18 @@ $filter = $_GET['filter'] ?? 'all';
             <a href="?view=attendance" class="flex items-center space-x-3 p-3 rounded-xl transition-all <?php echo $view == 'attendance' ? 'bg-blue-600 shadow-lg shadow-blue-600/30' : 'hover:bg-slate-800 text-slate-400'; ?>">
                 <i class="fa-solid fa-calendar-check w-4"></i>
                 <span class="text-sm font-bold">Attendance</span>
+            </a>
+            <a href="?view=graduation" class="flex items-center justify-between p-3 rounded-xl transition-all <?php echo $view == 'graduation' ? 'bg-blue-600 shadow-lg shadow-blue-600/30' : 'hover:bg-slate-800 text-slate-400'; ?>">
+                <div class="flex items-center space-x-3">
+                    <i class="fa-solid fa-graduation-cap w-4"></i>
+                    <span class="text-sm font-bold">Graduation Requests</span>
+                </div>
+                <?php
+                $pending_grad_count = intval(mysqli_fetch_assoc(mysqli_query($conn,
+                    "SELECT COUNT(*) c FROM graduation_registrations WHERE status='pending'"))['c'] ?? 0);
+                if ($pending_grad_count > 0): ?>
+                <span class="text-[10px] bg-amber-500 text-white px-2 py-0.5 rounded-full font-bold"><?php echo $pending_grad_count; ?></span>
+                <?php endif; ?>
             </a>
 
             <div class="pt-3 mt-2 border-t border-slate-800">
@@ -101,6 +117,22 @@ $filter = $_GET['filter'] ?? 'all';
                         <span class="text-sm font-medium text-slate-300">At Risk</span>
                     </div>
                     <span class="text-[10px] bg-rose-500/10 text-rose-400 px-2 py-0.5 rounded-full font-bold"><?php echo $riskCount; ?></span>
+                </a>
+            </div>
+
+            <div class="pt-3 mt-2 border-t border-slate-800">
+                <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest px-3 mb-2">Adaptive Engine</p>
+                <a href="risk_dashboard.php" class="flex items-center space-x-3 p-3 rounded-xl hover:bg-slate-800 group transition-all">
+                    <i class="fa-solid fa-gauge-high text-violet-400 w-4"></i>
+                    <span class="text-sm font-medium text-slate-300">Risk Dashboard</span>
+                </a>
+                <a href="recommendation_evaluation.php" class="flex items-center space-x-3 p-3 rounded-xl hover:bg-slate-800 group transition-all">
+                    <i class="fa-solid fa-thumbs-up text-emerald-400 w-4"></i>
+                    <span class="text-sm font-medium text-slate-300">Recommendation Evaluation</span>
+                </a>
+                <a href="rule_config.php" class="flex items-center space-x-3 p-3 rounded-xl hover:bg-slate-800 group transition-all">
+                    <i class="fa-solid fa-sliders text-indigo-400 w-4"></i>
+                    <span class="text-sm font-medium text-slate-300">Rule Configuration</span>
                 </a>
             </div>
         </div>
@@ -255,6 +287,35 @@ $filter = $_GET['filter'] ?? 'all';
             </div>
         </div>
 
+        <!-- Course search bar -->
+        <div class="flex items-center gap-3 mb-6 flex-wrap">
+            <div class="relative flex-1 min-w-[220px]">
+                <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                <input type="text" id="course-search" placeholder="Search course title or lecturer..."
+                    oninput="filterCourses()"
+                    class="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-400 transition-all">
+            </div>
+            <div id="course-count-badge" class="text-xs font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">
+                <?php echo count($all_courses_arr); ?> courses
+            </div>
+        </div>
+        <script>
+        function filterCourses() {
+            const q = (document.getElementById('course-search')?.value || '').toLowerCase();
+            const cards = document.querySelectorAll('.course-card');
+            let visible = 0;
+            cards.forEach(card => {
+                const title  = (card.dataset.title    || '').toLowerCase();
+                const lect   = (card.dataset.lecturer || '').toLowerCase();
+                const show   = !q || title.includes(q) || lect.includes(q);
+                card.style.display = show ? '' : 'none';
+                if (show) visible++;
+            });
+            const badge = document.getElementById('course-count-badge');
+            if (badge) badge.textContent = visible + ' course' + (visible !== 1 ? 's' : '');
+        }
+        </script>
+
         <?php if ($sts): ?>
         <div class="mb-5 px-5 py-3 rounded-2xl text-xs font-black uppercase border flex items-center gap-2 <?php echo str_contains($sts,'error') ? 'bg-red-50 text-red-600 border-red-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'; ?>">
             <i class="fa-solid <?php echo str_contains($sts,'error') ? 'fa-triangle-exclamation' : 'fa-circle-check'; ?>"></i>
@@ -277,7 +338,9 @@ $filter = $_GET['filter'] ?? 'all';
             $isOpen = ($sts_course === $course['id'] || count($all_courses_arr) === 1);
         ?>
         <div class="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden course-card"
-             id="course-card-<?php echo $course['id']; ?>">
+             id="course-card-<?php echo $course['id']; ?>"
+             data-title="<?php echo strtolower(htmlspecialchars($course['title'])); ?>"
+             data-lecturer="<?php echo strtolower(htmlspecialchars($course['course_lecturer'] ?? '')); ?>">
 
             <!-- Course Header Row -->
             <div class="px-6 py-5 flex items-center justify-between cursor-pointer hover:bg-slate-50/60 transition-colors"
@@ -349,15 +412,25 @@ $filter = $_GET['filter'] ?? 'all';
                                         class="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-indigo-400 transition-all">
                                 </div>
                                 <div>
-                                    <label class="text-[8px] font-black uppercase text-slate-400 tracking-widest block mb-1">Assign Lecturer</label>
-                                    <select name="lecturer_id"
+                                    <label class="text-[8px] font-black uppercase text-slate-400 tracking-widest block mb-1">Semester</label>
+                                    <select name="semester_number"
                                         class="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold outline-none focus:ring-2 focus:ring-indigo-400 transition-all">
-                                        <option value="">— None —</option>
-                                        <?php foreach ($all_lecturers as $lec): ?>
-                                        <option value="<?php echo $lec['id']; ?>"><?php echo htmlspecialchars($lec['full_name']); ?></option>
-                                        <?php endforeach; ?>
+                                        <?php for ($sn = 1; $sn <= 8; $sn++): ?>
+                                        <option value="<?php echo $sn; ?>" <?php echo $sn===1?'selected':''; ?>>Semester <?php echo $sn; ?></option>
+                                        <?php endfor; ?>
                                     </select>
                                 </div>
+                            </div>
+
+                            <div>
+                                <label class="text-[8px] font-black uppercase text-slate-400 tracking-widest block mb-1">Assign Lecturer</label>
+                                <select name="lecturer_id"
+                                    class="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-semibold outline-none focus:ring-2 focus:ring-indigo-400 transition-all">
+                                    <option value="">— None —</option>
+                                    <?php foreach ($all_lecturers as $lec): ?>
+                                    <option value="<?php echo $lec['id']; ?>"><?php echo htmlspecialchars($lec['full_name']); ?></option>
+                                    <?php endforeach; ?>
+                                </select>
                             </div>
 
                             <div>
@@ -401,6 +474,13 @@ $filter = $_GET['filter'] ?? 'all';
                                             <?php if ($unit['unit_code']): ?>
                                             <span class="text-[8px] font-black uppercase bg-blue-50 text-blue-600 border border-blue-100 px-1.5 py-0.5 rounded-md"><?php echo htmlspecialchars($unit['unit_code']); ?></span>
                                             <?php endif; ?>
+                                            <select class="text-[8px] font-black uppercase bg-violet-50 text-violet-600 border border-violet-100 px-1.5 py-0.5 rounded-md cursor-pointer"
+                                                    data-unit-id="<?php echo $unit['id']; ?>"
+                                                    onchange="submitUnitSemester(this)">
+                                                <?php for ($s = 1; $s <= 8; $s++): ?>
+                                                <option value="<?php echo $s; ?>" <?php echo intval($unit['semester_number'] ?? 1) === $s ? 'selected' : ''; ?>>Sem <?php echo $s; ?></option>
+                                                <?php endfor; ?>
+                                            </select>
                                         </div>
                                         <div class="flex items-center gap-3 mt-0.5">
                                             <?php if ($unit['lecturer_name']): ?>
@@ -531,6 +611,54 @@ $filter = $_GET['filter'] ?? 'all';
         <script>setTimeout(() => { const t = document.getElementById('adm-toast'); if(t){ t.style.transition='opacity .5s'; t.style.opacity='0'; setTimeout(()=>t.remove(),500); } }, 4000);</script>
         <?php endif; ?>
         <div class="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm">
+
+            <!-- ── Search + Filter bar ── -->
+            <div class="flex items-center gap-3 mb-6 flex-wrap">
+                <div class="relative flex-1 min-w-[220px]">
+                    <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                    <input type="text" id="user-search" placeholder="Search name, email or admission no..."
+                        oninput="filterUsers()"
+                        class="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-400 transition-all">
+                </div>
+                <select id="user-role-filter" onchange="filterUsers()"
+                    class="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-600 outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer">
+                    <option value="">All Roles</option>
+                    <option value="student">Students</option>
+                    <option value="lecturer">Lecturers</option>
+                    <option value="financial_accountant">Finance</option>
+                    <option value="boarding_master">Boarding Master</option>
+                    <option value="hr_manager">HR Manager</option>
+                </select>
+                <div id="user-count-badge" class="text-xs font-black text-slate-400 uppercase tracking-widest whitespace-nowrap"></div>
+            </div>
+            <script>
+            function filterUsers() {
+                const q    = (document.getElementById('user-search')?.value || '').toLowerCase();
+                const role = (document.getElementById('user-role-filter')?.value || '').toLowerCase();
+                const rows = document.querySelectorAll('#user-table-body tr.user-row');
+                let visible = 0;
+                rows.forEach(row => {
+                    const name  = (row.dataset.name  || '').toLowerCase();
+                    const email = (row.dataset.email || '').toLowerCase();
+                    const adm   = (row.dataset.adm   || '').toLowerCase();
+                    const r     = (row.dataset.role  || '').toLowerCase();
+                    const matchQ = !q    || name.includes(q) || email.includes(q) || adm.includes(q);
+                    const matchR = !role || r === role;
+                    const show   = matchQ && matchR;
+                    row.style.display = show ? '' : 'none';
+                    if (show) visible++;
+                });
+                const badge = document.getElementById('user-count-badge');
+                if (badge) badge.textContent = visible + ' result' + (visible !== 1 ? 's' : '');
+            }
+            // Init count on load
+            document.addEventListener('DOMContentLoaded', () => {
+                const rows = document.querySelectorAll('#user-table-body tr.user-row');
+                const badge = document.getElementById('user-count-badge');
+                if (badge) badge.textContent = rows.length + ' user' + (rows.length !== 1 ? 's' : '');
+            });
+            </script>
+
             <table class="w-full text-left">
                 <thead>
                     <tr class="text-[10px] font-black uppercase text-slate-400 border-b border-slate-50">
@@ -541,7 +669,7 @@ $filter = $_GET['filter'] ?? 'all';
                         <th class="pb-4 text-center">Actions</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-slate-50">
+                <tbody class="divide-y divide-slate-50" id="user-table-body">
                     <?php
                     // Ensure admission_number column exists
                     @mysqli_query($conn, "ALTER TABLE users ADD COLUMN `admission_number` VARCHAR(30) DEFAULT NULL AFTER `email`");
@@ -549,7 +677,11 @@ $filter = $_GET['filter'] ?? 'all';
 
                     $users = mysqli_query($conn, "SELECT * FROM users WHERE role != 'admin' ORDER BY id DESC");
                     while($u = mysqli_fetch_assoc($users)): ?>
-                    <tr>
+                    <tr class="user-row"
+                        data-name="<?php echo strtolower(htmlspecialchars($u['full_name'])); ?>"
+                        data-email="<?php echo strtolower(htmlspecialchars($u['email'])); ?>"
+                        data-adm="<?php echo strtolower(htmlspecialchars($u['admission_number'] ?? '')); ?>"
+                        data-role="<?php echo htmlspecialchars($u['role']); ?>">
                         <td class="py-4 font-bold text-slate-700"><?php echo $u['full_name']; ?></td>
                         <td class="py-4 text-sm text-slate-500"><?php echo $u['email']; ?></td>
                         <td class="py-3">
@@ -583,6 +715,323 @@ $filter = $_GET['filter'] ?? 'all';
                 </tbody>
             </table>
         </div>
+        <?php endif; ?>
+
+        <?php if ($view == 'classes'):
+            // ── Ensure class tables (safety net if config.php hasn't run yet) ──
+            mysqli_query($conn, "CREATE TABLE IF NOT EXISTS `classes` (
+              `id` INT AUTO_INCREMENT PRIMARY KEY,
+              `class_code` VARCHAR(20) NOT NULL,
+              `category` ENUM('Education','Technical','Business','Nursing') NOT NULL,
+              `capacity` INT NOT NULL DEFAULT 40,
+              `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              UNIQUE KEY `uq_class_code` (`class_code`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+            mysqli_query($conn, "CREATE TABLE IF NOT EXISTS `class_allocations` (
+              `id` INT AUTO_INCREMENT PRIMARY KEY,
+              `student_id` INT NOT NULL,
+              `class_id` INT NOT NULL,
+              `allocated_by` INT DEFAULT NULL,
+              `allocated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              `status` ENUM('active','transferred','removed') NOT NULL DEFAULT 'active',
+              KEY(`student_id`), KEY(`class_id`), KEY(`status`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+            $cls_status = $_GET['cmsg'] ?? '';
+
+            // Fetch all classes grouped by category with live occupancy
+            $classes_res = mysqli_query($conn, "
+                SELECT c.*, COUNT(ca.id) AS occupied
+                FROM classes c
+                LEFT JOIN class_allocations ca ON ca.class_id = c.id AND ca.status='active'
+                GROUP BY c.id
+                ORDER BY FIELD(c.category,'Education','Technical','Business','Nursing'),
+                         CAST(SUBSTRING_INDEX(c.class_code,'_',-1) AS UNSIGNED)
+            ");
+            $classes_by_cat = [];
+            while ($cl = mysqli_fetch_assoc($classes_res)) {
+                $classes_by_cat[$cl['category']][] = $cl;
+            }
+
+            // Fetch all students + their current active class (if any)
+            $students_res = mysqli_query($conn, "
+                SELECT u.id, u.full_name, u.email, u.admission_number,
+                       cl.class_code, cl.category AS class_category, ca.id AS alloc_id
+                FROM users u
+                LEFT JOIN class_allocations ca ON ca.student_id = u.id AND ca.status='active'
+                LEFT JOIN classes cl ON cl.id = ca.class_id
+                WHERE u.role='student'
+                ORDER BY u.full_name ASC
+            ");
+            $all_students = [];
+            while ($s = mysqli_fetch_assoc($students_res)) $all_students[] = $s;
+
+            $total_students   = count($all_students);
+            $allocated_count  = count(array_filter($all_students, fn($s) => $s['alloc_id']));
+            $unallocated_count = $total_students - $allocated_count;
+        ?>
+        <div class="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-sm">
+
+            <div class="flex items-center justify-between mb-2 flex-wrap gap-3">
+                <div>
+                    <h2 class="text-2xl font-black text-slate-900">Class Allocation</h2>
+                    <p class="text-slate-500 text-sm mt-1">Education (SE_1–SE_10) · Technical (ST_1–ST_10) · Business (SB_1–SB_10) · Nursing (SN_1–SN_5)</p>
+                </div>
+            </div>
+
+            <?php if ($cls_status): ?>
+            <div class="my-4 px-5 py-3 rounded-2xl text-xs font-black uppercase border flex items-center gap-2
+                <?php echo str_contains($cls_status,'error') || str_contains($cls_status,'full')
+                    ? 'bg-red-50 text-red-600 border-red-200'
+                    : 'bg-emerald-50 text-emerald-700 border-emerald-200'; ?>">
+                <i class="fa-solid <?php echo str_contains($cls_status,'error') || str_contains($cls_status,'full') ? 'fa-triangle-exclamation' : 'fa-circle-check'; ?>"></i>
+                <?php
+                echo match($cls_status) {
+                    'allocated'  => 'Student allocated to class successfully.',
+                    'removed'    => 'Student removed from class.',
+                    'full'       => 'That class is already at full capacity.',
+                    'capacity_updated' => 'Class capacity updated successfully.',
+                    'error'      => 'An error occurred. Please try again.',
+                    default      => ucfirst(str_replace('_',' ',$cls_status))
+                };
+                ?>
+            </div>
+            <?php endif; ?>
+
+            <!-- KPI strip -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 my-6">
+                <div class="bg-slate-50 rounded-2xl p-4 border border-slate-100">
+                    <p class="text-[9px] font-black uppercase text-slate-400">Total Students</p>
+                    <p class="text-2xl font-black text-slate-900 mt-1"><?php echo $total_students; ?></p>
+                </div>
+                <div class="bg-emerald-50 rounded-2xl p-4 border border-emerald-100">
+                    <p class="text-[9px] font-black uppercase text-emerald-500">Allocated</p>
+                    <p class="text-2xl font-black text-emerald-700 mt-1"><?php echo $allocated_count; ?></p>
+                </div>
+                <div class="bg-amber-50 rounded-2xl p-4 border border-amber-100">
+                    <p class="text-[9px] font-black uppercase text-amber-500">Unallocated</p>
+                    <p class="text-2xl font-black text-amber-700 mt-1"><?php echo $unallocated_count; ?></p>
+                </div>
+                <div class="bg-indigo-50 rounded-2xl p-4 border border-indigo-100">
+                    <p class="text-[9px] font-black uppercase text-indigo-500">Classes Available</p>
+                    <p class="text-2xl font-black text-indigo-700 mt-1"><?php echo array_sum(array_map('count',$classes_by_cat)); ?></p>
+                </div>
+            </div>
+
+            <!-- ── Bulk capacity control ── -->
+            <div class="mb-6 flex items-center gap-3 flex-wrap bg-blue-50 border border-blue-100 rounded-2xl p-4">
+                <i class="fa-solid fa-users-gear text-blue-500"></i>
+                <span class="text-xs font-bold text-blue-700">Class sizes aren't fixed at 40 — set any capacity per class below, or apply one number to every class at once:</span>
+                <form method="POST" action="admin_actions.php" style="display:flex;gap:8px;align-items:center;margin-left:auto;">
+                    <input type="hidden" name="action_type" value="set_all_capacity">
+                    <input type="number" name="bulk_capacity" min="1" placeholder="e.g. 60" required
+                        style="width:100px;padding:7px 10px;font-size:12px;border:1px solid #bfdbfe;border-radius:8px;outline:none;">
+                    <button type="submit" onclick="return confirm('Apply this capacity to ALL classes? Existing individual capacities will be overwritten.')"
+                        style="padding:7px 14px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:11px;font-weight:800;cursor:pointer;white-space:nowrap;">
+                        Apply to All Classes
+                    </button>
+                </form>
+            </div>
+
+            <!-- ── Class occupancy overview ── -->
+            <div class="mb-8">
+                <p class="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3">Class Occupancy <span class="normal-case text-slate-300 font-medium">(click any class to change its capacity)</span></p>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <?php
+                    $cat_colors = [
+                        'Education' => ['bg'=>'bg-blue-500',   'light'=>'bg-blue-50',   'text'=>'text-blue-700',   'icon'=>'fa-graduation-cap'],
+                        'Technical' => ['bg'=>'bg-purple-500', 'light'=>'bg-purple-50', 'text'=>'text-purple-700', 'icon'=>'fa-microchip'],
+                        'Business'  => ['bg'=>'bg-amber-500',  'light'=>'bg-amber-50',  'text'=>'text-amber-700',  'icon'=>'fa-briefcase'],
+                        'Nursing'   => ['bg'=>'bg-rose-500',   'light'=>'bg-rose-50',   'text'=>'text-rose-700',   'icon'=>'fa-heart-pulse'],
+                    ];
+                    foreach ($classes_by_cat as $cat => $classList):
+                        $cc = $cat_colors[$cat] ?? ['bg'=>'bg-slate-500','light'=>'bg-slate-50','text'=>'text-slate-700','icon'=>'fa-layer-group'];
+                    ?>
+                    <div class="border border-slate-100 rounded-2xl p-4">
+                        <div class="flex items-center gap-2 mb-3">
+                            <div class="w-7 h-7 rounded-lg <?php echo $cc['light']; ?> flex items-center justify-center">
+                                <i class="fa-solid <?php echo $cc['icon']; ?> <?php echo $cc['text']; ?> text-xs"></i>
+                            </div>
+                            <span class="text-xs font-black uppercase <?php echo $cc['text']; ?>"><?php echo $cat; ?></span>
+                        </div>
+                        <div class="grid grid-cols-5 gap-2">
+                            <?php foreach ($classList as $cl):
+                                $pct = $cl['capacity'] > 0 ? min(100, round($cl['occupied'] / $cl['capacity'] * 100)) : 0;
+                                $full = $cl['occupied'] >= $cl['capacity'];
+                            ?>
+                            <div class="text-center cursor-pointer group" title="Click to edit capacity" onclick="openCapEdit(<?php echo $cl['id']; ?>, '<?php echo $cl['class_code']; ?>', <?php echo $cl['capacity']; ?>, <?php echo $cl['occupied']; ?>)">
+                                <div class="w-full h-14 bg-slate-100 rounded-lg relative overflow-hidden flex items-end group-hover:ring-2 group-hover:ring-blue-400 transition-all">
+                                    <div class="w-full <?php echo $full ? 'bg-red-400' : $cc['bg']; ?> transition-all" style="height:<?php echo $pct; ?>%"></div>
+                                    <i class="fa-solid fa-pen absolute top-1 right-1 text-[7px] text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity"></i>
+                                </div>
+                                <p class="text-[9px] font-bold text-slate-500 mt-1"><?php echo $cl['class_code']; ?></p>
+                                <p class="text-[8px] text-slate-400"><?php echo $cl['occupied']; ?>/<?php echo $cl['capacity']; ?></p>
+                            </div>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+
+            <!-- ── Search + filter bar ── -->
+            <div class="flex items-center gap-3 mb-5 flex-wrap">
+                <div class="relative flex-1 min-w-[220px]">
+                    <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                    <input type="text" id="class-search" placeholder="Search student name, email or admission no..."
+                        oninput="filterClassStudents()"
+                        class="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-400 transition-all">
+                </div>
+                <select id="class-status-filter" onchange="filterClassStudents()"
+                    class="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-600 outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer">
+                    <option value="">All Students</option>
+                    <option value="allocated">Allocated Only</option>
+                    <option value="unallocated">Unallocated Only</option>
+                </select>
+                <div id="class-count-badge" class="text-xs font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">
+                    <?php echo $total_students; ?> students
+                </div>
+            </div>
+            <script>
+            function filterClassStudents() {
+                const q      = (document.getElementById('class-search')?.value || '').toLowerCase();
+                const status = document.getElementById('class-status-filter')?.value || '';
+                const rows   = document.querySelectorAll('#class-table-body tr.class-row');
+                let visible = 0;
+                rows.forEach(row => {
+                    const name  = (row.dataset.name  || '').toLowerCase();
+                    const email = (row.dataset.email || '').toLowerCase();
+                    const adm   = (row.dataset.adm   || '').toLowerCase();
+                    const alloc = row.dataset.allocated === '1';
+                    const matchQ = !q || name.includes(q) || email.includes(q) || adm.includes(q);
+                    const matchS = !status || (status === 'allocated' && alloc) || (status === 'unallocated' && !alloc);
+                    const show   = matchQ && matchS;
+                    row.style.display = show ? '' : 'none';
+                    if (show) visible++;
+                });
+                const badge = document.getElementById('class-count-badge');
+                if (badge) badge.textContent = visible + ' student' + (visible !== 1 ? 's' : '');
+            }
+            </script>
+
+            <div class="overflow-x-auto">
+            <table class="w-full text-left">
+                <thead>
+                    <tr class="text-[10px] font-black uppercase text-slate-400 border-b border-slate-50">
+                        <th class="pb-4">Student</th>
+                        <th class="pb-4">Admission No.</th>
+                        <th class="pb-4">Current Class</th>
+                        <th class="pb-4">Allocate To</th>
+                        <th class="pb-4 text-center">Action</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-50" id="class-table-body">
+                <?php foreach ($all_students as $s):
+                    $has_class = !empty($s['alloc_id']);
+                    $cc = $cat_colors[$s['class_category'] ?? ''] ?? null;
+                ?>
+                    <tr class="class-row"
+                        data-name="<?php echo strtolower(htmlspecialchars($s['full_name'])); ?>"
+                        data-email="<?php echo strtolower(htmlspecialchars($s['email'])); ?>"
+                        data-adm="<?php echo strtolower(htmlspecialchars($s['admission_number'] ?? '')); ?>"
+                        data-allocated="<?php echo $has_class ? '1' : '0'; ?>">
+                        <td class="py-4 font-bold text-slate-700"><?php echo htmlspecialchars($s['full_name']); ?>
+                            <div class="text-[10px] text-slate-400 font-medium"><?php echo htmlspecialchars($s['email']); ?></div>
+                        </td>
+                        <td class="py-4 text-xs font-mono text-slate-500"><?php echo htmlspecialchars($s['admission_number'] ?? '—'); ?></td>
+                        <td class="py-4">
+                            <?php if ($has_class): ?>
+                            <span class="px-3 py-1 rounded-full text-[10px] font-black uppercase <?php echo $cc['light'] ?? 'bg-slate-100'; ?> <?php echo $cc['text'] ?? 'text-slate-600'; ?>">
+                                <?php echo htmlspecialchars($s['class_code']); ?>
+                            </span>
+                            <?php else: ?>
+                            <span class="px-3 py-1 rounded-full text-[10px] font-black uppercase bg-slate-100 text-slate-400">Unallocated</span>
+                            <?php endif; ?>
+                        </td>
+                        <td class="py-3">
+                            <form method="POST" action="admin_actions.php" style="display:flex;gap:5px;align-items:center;">
+                                <input type="hidden" name="action_type" value="allocate_class">
+                                <input type="hidden" name="student_id" value="<?php echo $s['id']; ?>">
+                                <select name="class_id" required
+                                    style="padding:6px 8px;font-size:11px;border:1px solid #e2e8f0;border-radius:7px;color:#334155;outline:none;min-width:150px;">
+                                    <option value="">Select class…</option>
+                                    <?php foreach ($classes_by_cat as $cat => $classList): ?>
+                                    <optgroup label="<?php echo $cat; ?>">
+                                        <?php foreach ($classList as $cl):
+                                            $full = $cl['occupied'] >= $cl['capacity'];
+                                            $sel  = ($s['class_code'] ?? '') === $cl['class_code'] ? 'selected' : '';
+                                        ?>
+                                        <option value="<?php echo $cl['id']; ?>" <?php echo $sel; ?> <?php echo $full ? 'disabled' : ''; ?>>
+                                            <?php echo $cl['class_code']; ?> (<?php echo $cl['occupied']; ?>/<?php echo $cl['capacity']; ?>)<?php echo $full ? ' — FULL' : ''; ?>
+                                        </option>
+                                        <?php endforeach; ?>
+                                    </optgroup>
+                                    <?php endforeach; ?>
+                                </select>
+                                <button type="submit" style="padding:6px 12px;background:#2563eb;color:#fff;border:none;border-radius:6px;font-size:10px;font-weight:800;cursor:pointer;white-space:nowrap;">
+                                    <?php echo $has_class ? 'Move' : 'Allocate'; ?>
+                                </button>
+                            </form>
+                        </td>
+                        <td class="py-4 text-center">
+                            <?php if ($has_class): ?>
+                            <a href="admin_actions.php?remove_class_allocation=<?php echo $s['alloc_id']; ?>"
+                               onclick="return confirm('Remove <?php echo htmlspecialchars(addslashes($s['full_name'])); ?> from their class?')"
+                               class="w-8 h-8 rounded-lg bg-rose-50 text-rose-500 inline-flex items-center justify-center hover:bg-rose-600 hover:text-white transition-all">
+                                <i class="fa-solid fa-user-minus text-xs"></i>
+                            </a>
+                            <?php else: ?>
+                            <span class="text-slate-200"><i class="fa-solid fa-minus text-xs"></i></span>
+                            <?php endif; ?>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+                <?php if (empty($all_students)): ?>
+                    <tr><td colspan="5" class="py-10 text-center text-slate-400 font-bold text-sm">No students found.</td></tr>
+                <?php endif; ?>
+                </tbody>
+            </table>
+            </div>
+        </div>
+
+        <!-- ── Capacity edit modal ── -->
+        <div id="capEditModal" class="fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-[100] hidden items-center justify-center p-6" onclick="if(event.target===this) closeCapEdit()">
+            <div class="bg-white rounded-3xl p-7 w-full max-w-xs shadow-2xl">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-black text-slate-900">Edit Capacity</h3>
+                    <button onclick="closeCapEdit()" class="w-7 h-7 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-400"><i class="fa-solid fa-xmark text-xs"></i></button>
+                </div>
+                <p class="text-xs text-slate-400 mb-4">Class <span id="capEditCode" class="font-black text-slate-700"></span> — currently <span id="capEditOccupied" class="font-black text-slate-700"></span> student(s) enrolled.</p>
+                <form method="POST" action="admin_actions.php">
+                    <input type="hidden" name="action_type" value="set_class_capacity">
+                    <input type="hidden" name="class_id" id="capEditClassId">
+                    <label class="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1 block">New Capacity (no upper limit)</label>
+                    <input type="number" name="capacity" id="capEditInput" min="1" required
+                        class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 mb-4">
+                    <div class="flex gap-2">
+                        <button type="submit" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl text-xs font-black uppercase tracking-widest transition-all">Save</button>
+                        <button type="button" onclick="closeCapEdit()" class="px-5 py-3 bg-slate-100 hover:bg-slate-200 text-slate-500 rounded-xl text-xs font-black uppercase tracking-widest transition-all">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <script>
+        function openCapEdit(id, code, capacity, occupied) {
+            document.getElementById('capEditClassId').value = id;
+            document.getElementById('capEditCode').textContent = code;
+            document.getElementById('capEditOccupied').textContent = occupied;
+            document.getElementById('capEditInput').value = capacity;
+            const m = document.getElementById('capEditModal');
+            m.classList.remove('hidden');
+            m.classList.add('flex');
+        }
+        function closeCapEdit() {
+            const m = document.getElementById('capEditModal');
+            m.classList.add('hidden');
+            m.classList.remove('flex');
+        }
+        </script>
+
         <?php endif; ?>
 
         <?php if ($view == 'marks'):
@@ -950,11 +1399,13 @@ $filter = $_GET['filter'] ?? 'all';
         $adm_students = [];
         if ($adm_unit_id) {
             $str = mysqli_query($conn,
-                "SELECT u.id, u.full_name
+                "SELECT u.id, u.full_name, cls.class_code
                  FROM unit_registrations ur
                  JOIN users u ON u.id = ur.student_id
+                 LEFT JOIN class_allocations ca ON ca.student_id = u.id AND ca.status = 'active'
+                 LEFT JOIN classes cls ON cls.id = ca.class_id
                  WHERE ur.unit_id = $adm_unit_id
-                 ORDER BY u.full_name ASC"
+                 ORDER BY COALESCE(cls.class_code, 'ZZZ') ASC, u.full_name ASC"
             );
             while ($st = mysqli_fetch_assoc($str)) $adm_students[] = $st;
         }
@@ -1063,8 +1514,32 @@ $filter = $_GET['filter'] ?? 'all';
 
                 <!-- ── LEFT: Unit browser grouped by course ── -->
                 <div class="w-64 flex-shrink-0 border-r border-slate-100 overflow-y-auto bg-slate-50">
+                    <!-- Unit search -->
+                    <div class="p-3 border-b border-slate-200 bg-white sticky top-0 z-10">
+                        <div class="relative">
+                            <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                            <input type="text" id="att-unit-search" placeholder="Search units..."
+                                oninput="filterAttUnits()"
+                                class="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500 transition-all">
+                        </div>
+                    </div>
+                    <script>
+                    function filterAttUnits() {
+                        const q = (document.getElementById('att-unit-search')?.value||'').toLowerCase();
+                        document.querySelectorAll('.att-unit-item').forEach(item => {
+                            const t = (item.dataset.title||'').toLowerCase();
+                            const c = (item.dataset.course||'').toLowerCase();
+                            item.style.display = !q || t.includes(q) || c.includes(q) ? '' : 'none';
+                        });
+                        document.querySelectorAll('.att-course-group').forEach(group => {
+                            const items = group.querySelectorAll('.att-unit-item');
+                            const anyVisible = Array.from(items).some(i => i.style.display !== 'none');
+                            group.style.display = anyVisible ? '' : 'none';
+                        });
+                    }
+                    </script>
                     <?php foreach ($adm_courses_map as $cid => $course): ?>
-                    <div class="pt-4">
+                    <div class="pt-4 att-course-group">
                         <!-- Course heading -->
                         <p class="px-4 pb-2 text-[9px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-200">
                             <i class="fa-solid fa-book-open mr-1 text-blue-400"></i>
@@ -1073,10 +1548,12 @@ $filter = $_GET['filter'] ?? 'all';
                         <?php foreach ($course['units'] as $au): ?>
                         <?php $isActive = (intval($au['id']) === $adm_unit_id); ?>
                         <a href="?view=attendance&att_unit=<?php echo $au['id']; ?>"
-                           class="flex items-start gap-3 px-4 py-3 border-b border-slate-100 transition-all
+                           class="att-unit-item flex items-start gap-3 px-4 py-3 border-b border-slate-100 transition-all
                                   <?php echo $isActive
                                       ? 'bg-blue-600 text-white'
-                                      : 'hover:bg-white text-slate-600 hover:text-slate-900'; ?>">
+                                      : 'hover:bg-white text-slate-600 hover:text-slate-900'; ?>"
+                           data-title="<?php echo strtolower(htmlspecialchars($au['title'])); ?>"
+                           data-course="<?php echo strtolower(htmlspecialchars($course['title'])); ?>">
                             <div class="w-7 h-7 rounded-lg flex-shrink-0 flex items-center justify-center mt-0.5
                                         <?php echo $isActive ? 'bg-white/20' : 'bg-blue-50'; ?>">
                                 <i class="fa-solid fa-layer-group text-[10px] <?php echo $isActive ? 'text-white' : 'text-blue-500'; ?>"></i>
@@ -1240,6 +1717,9 @@ $filter = $_GET['filter'] ?? 'all';
                                                 <span class="text-[10px] font-black text-white"><?php echo strtoupper(substr($st['full_name'],0,1)); ?></span>
                                             </div>
                                             <span class="font-bold text-slate-800 text-xs leading-tight"><?php echo htmlspecialchars($st['full_name']); ?></span>
+                                            <?php if (!empty($st['class_code'])): ?>
+                                            <span style="background:#eef2ff;color:#4338ca;font-size:9px;font-weight:800;padding:1px 6px;border-radius:6px;margin-left:4px;"><?php echo htmlspecialchars($st['class_code']); ?></span>
+                                            <?php endif; ?>
                                         </div>
                                     </td>
 
@@ -1352,6 +1832,187 @@ $filter = $_GET['filter'] ?? 'all';
         </div>
         <?php endif; /* end view==attendance */ ?>
 
+        <?php if ($view == 'graduation'):
+            $grad_reqs = mysqli_query($conn, "
+                SELECT gr.*, u.full_name, u.admission_number, u.email, c.title AS course_title
+                FROM graduation_registrations gr
+                JOIN users u ON u.id = gr.student_id
+                LEFT JOIN courses c ON c.id = gr.course_id
+                ORDER BY FIELD(gr.status,'pending','approved','rejected','cleared'), gr.created_at DESC
+            ");
+        ?>
+        <div>
+            <div class="flex items-center justify-between mb-1 flex-wrap gap-3">
+                <h1 class="text-2xl font-black text-slate-900">Graduation Requests</h1>
+                <?php
+                $pending_grad_ids = [];
+                $pc_res = mysqli_query($conn, "SELECT id FROM graduation_registrations WHERE status='pending'");
+                while ($pcr = mysqli_fetch_assoc($pc_res)) $pending_grad_ids[] = $pcr['id'];
+                if (!empty($pending_grad_ids)):
+                ?>
+                <form method="POST" action="admin_actions.php" onsubmit="return confirm('Approve all <?php echo count($pending_grad_ids); ?> pending requests?');">
+                    <input type="hidden" name="action_type" value="bulk_approve_graduation">
+                    <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-black uppercase rounded-xl shadow-sm">
+                        <i class="fa-solid fa-check-double mr-1.5"></i>Approve All Pending (<?php echo count($pending_grad_ids); ?>)
+                    </button>
+                </form>
+                <?php endif; ?>
+            </div>
+            <p class="text-slate-500 text-sm mb-2">Review and approve student graduation registrations.</p>
+            <p class="text-emerald-700 bg-emerald-50 border border-emerald-100 inline-block px-3 py-1.5 rounded-lg text-[11px] font-bold mb-6">
+                <i class="fa-solid fa-shield-check mr-1"></i>Every pending request here has already been auto-verified for its specific course — students can only submit once all units in that course are passed and their fees are fully cleared, so it's safe to bulk-approve.
+            </p>
+
+            <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                <div class="p-4 border-b border-slate-100">
+                    <div class="relative max-w-sm">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-300 text-xs"></i>
+                        <input type="text" id="gradSearch" onkeyup="filterGradTable()" placeholder="Search by name, admission no., or course…"
+                               class="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold focus:border-indigo-500 focus:outline-none">
+                    </div>
+                </div>
+                <table class="w-full text-left" id="gradTable">
+                    <thead class="border-b border-slate-100 bg-slate-50">
+                        <tr>
+                            <th class="text-[9px] font-black uppercase text-slate-400 tracking-widest px-5 py-3">Student</th>
+                            <th class="text-[9px] font-black uppercase text-slate-400 tracking-widest px-4 py-3">Course</th>
+                            <th class="text-[9px] font-black uppercase text-slate-400 tracking-widest px-4 py-3">Ceremony</th>
+                            <th class="text-[9px] font-black uppercase text-slate-400 tracking-widest px-4 py-3">Gown Size</th>
+                            <th class="text-[9px] font-black uppercase text-slate-400 tracking-widest px-4 py-3">Status</th>
+                            <th class="text-[9px] font-black uppercase text-slate-400 tracking-widest px-4 py-3">Graduation Date</th>
+                            <th class="text-[9px] font-black uppercase text-slate-400 tracking-widest px-4 py-3">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-50">
+                    <?php if (mysqli_num_rows($grad_reqs) === 0): ?>
+                        <tr><td colspan="7" class="text-center py-10 text-slate-400 text-sm">No graduation requests yet.</td></tr>
+                    <?php else: while ($gr = mysqli_fetch_assoc($grad_reqs)):
+                        $gcolors = ['pending'=>'bg-amber-50 text-amber-700','approved'=>'bg-emerald-50 text-emerald-700','rejected'=>'bg-red-50 text-red-700','cleared'=>'bg-violet-50 text-violet-700'];
+                        $gsearch = strtolower($gr['full_name'] . ' ' . ($gr['admission_number'] ?? '') . ' ' . ($gr['course_title'] ?? ''));
+                    ?>
+                        <tr class="hover:bg-slate-50/60" data-search="<?php echo htmlspecialchars($gsearch); ?>">
+                            <td class="px-5 py-3">
+                                <p class="text-xs font-black text-slate-800"><?php echo htmlspecialchars($gr['full_name']); ?></p>
+                                <p class="text-[10px] text-slate-400"><?php echo htmlspecialchars($gr['admission_number'] ?? '—'); ?></p>
+                            </td>
+                            <td class="px-4 py-3 text-xs font-semibold text-slate-600"><?php echo htmlspecialchars($gr['course_title'] ?? '—'); ?></td>
+                            <td class="px-4 py-3 text-xs font-semibold text-slate-600"><?php echo htmlspecialchars($gr['intended_ceremony']); ?></td>
+                            <td class="px-4 py-3 text-xs font-semibold text-slate-600"><?php echo htmlspecialchars($gr['gown_size'] ?? '—'); ?></td>
+                            <td class="px-4 py-3">
+                                <span class="px-2.5 py-1 rounded-full text-[10px] font-black uppercase <?php echo $gcolors[$gr['status']] ?? 'bg-slate-100 text-slate-500'; ?>"><?php echo htmlspecialchars($gr['status']); ?></span>
+                            </td>
+                            <td class="px-4 py-3">
+                                <?php if (in_array($gr['status'], ['approved','cleared'])): ?>
+                                <form method="POST" action="admin_actions.php" class="flex items-center gap-1.5">
+                                    <input type="hidden" name="action_type" value="set_graduation_date">
+                                    <input type="hidden" name="grad_id" value="<?php echo $gr['id']; ?>">
+                                    <input type="date" name="graduation_date" value="<?php echo htmlspecialchars($gr['graduation_date'] ?? ''); ?>"
+                                           class="px-2 py-1.5 rounded-lg border border-slate-200 text-[11px] font-semibold focus:border-indigo-500 focus:outline-none">
+                                    <button type="submit" class="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-black uppercase rounded-lg">Set</button>
+                                </form>
+                                <?php elseif (!empty($gr['graduation_date'])): ?>
+                                <span class="text-xs font-bold text-slate-600"><?php echo date('d M Y', strtotime($gr['graduation_date'])); ?></span>
+                                <?php else: ?>
+                                <span class="text-slate-300 text-xs">—</span>
+                                <?php endif; ?>
+                            </td>
+                            <td class="px-4 py-3">
+                                <?php if ($gr['status'] === 'pending'): ?>
+                                <div class="flex gap-2">
+                                    <form method="POST" action="admin_actions.php">
+                                        <input type="hidden" name="action_type" value="review_graduation">
+                                        <input type="hidden" name="grad_id" value="<?php echo $gr['id']; ?>">
+                                        <input type="hidden" name="new_status" value="approved">
+                                        <button type="submit" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black uppercase rounded-lg">Approve</button>
+                                    </form>
+                                    <form method="POST" action="admin_actions.php">
+                                        <input type="hidden" name="action_type" value="review_graduation">
+                                        <input type="hidden" name="grad_id" value="<?php echo $gr['id']; ?>">
+                                        <input type="hidden" name="new_status" value="rejected">
+                                        <button type="submit" class="px-3 py-1.5 bg-red-50 hover:bg-red-600 hover:text-white text-red-600 text-[10px] font-black uppercase rounded-lg">Reject</button>
+                                    </form>
+                                </div>
+                                <?php elseif ($gr['status'] === 'approved'): ?>
+                                <form method="POST" action="admin_actions.php">
+                                    <input type="hidden" name="action_type" value="review_graduation">
+                                    <input type="hidden" name="grad_id" value="<?php echo $gr['id']; ?>">
+                                    <input type="hidden" name="new_status" value="cleared">
+                                    <button type="submit" class="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white text-[10px] font-black uppercase rounded-lg">Mark Cleared</button>
+                                </form>
+                                <?php else: ?>
+                                <span class="text-slate-300 text-xs">—</span>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                    <?php endwhile; endif; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <?php endif; /* end view==graduation */ ?>
+
+        <?php if ($view == 'completions'):
+            $comp_res = mysqli_query($conn, "
+                SELECT u.id AS student_id, u.full_name, u.admission_number, c.id AS course_id, c.title AS course_title,
+                       cc.status, cc.checked_at
+                FROM enrollments e
+                JOIN users u ON u.id = e.student_id
+                JOIN courses c ON c.id = e.course_id
+                LEFT JOIN course_completions cc ON cc.student_id = u.id AND cc.course_id = c.id
+                ORDER BY u.full_name ASC, c.title ASC
+            ");
+        ?>
+        <div>
+            <h1 class="text-2xl font-black text-slate-900 mb-1">Completion Status</h1>
+            <p class="text-slate-500 text-sm mb-6">Per-course completion status for every enrolled student (fees cleared + all units passed).</p>
+
+            <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                <table class="w-full text-left">
+                    <thead class="border-b border-slate-100 bg-slate-50">
+                        <tr>
+                            <th class="text-[9px] font-black uppercase text-slate-400 tracking-widest px-5 py-3">Student</th>
+                            <th class="text-[9px] font-black uppercase text-slate-400 tracking-widest px-4 py-3">Course</th>
+                            <th class="text-[9px] font-black uppercase text-slate-400 tracking-widest px-4 py-3">Status</th>
+                            <th class="text-[9px] font-black uppercase text-slate-400 tracking-widest px-4 py-3">Last Checked</th>
+                            <th class="text-[9px] font-black uppercase text-slate-400 tracking-widest px-4 py-3">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-50">
+                    <?php if (mysqli_num_rows($comp_res) === 0): ?>
+                        <tr><td colspan="5" class="text-center py-10 text-slate-400 text-sm">No enrolled students yet.</td></tr>
+                    <?php else: while ($cc = mysqli_fetch_assoc($comp_res)): ?>
+                        <tr class="hover:bg-slate-50/60">
+                            <td class="px-5 py-3">
+                                <p class="text-xs font-black text-slate-800"><?php echo htmlspecialchars($cc['full_name']); ?></p>
+                                <p class="text-[10px] text-slate-400"><?php echo htmlspecialchars($cc['admission_number'] ?? '—'); ?></p>
+                            </td>
+                            <td class="px-4 py-3 text-xs font-semibold text-slate-600"><?php echo htmlspecialchars($cc['course_title']); ?></td>
+                            <td class="px-4 py-3">
+                                <?php if ($cc['status'] === 'complete'): ?>
+                                <span class="px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-emerald-50 text-emerald-700">Complete</span>
+                                <?php elseif ($cc['status'] === 'incomplete'): ?>
+                                <span class="px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-amber-50 text-amber-700">Incomplete</span>
+                                <?php else: ?>
+                                <span class="px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-slate-100 text-slate-500">Not Checked</span>
+                                <?php endif; ?>
+                            </td>
+                            <td class="px-4 py-3 text-xs text-slate-500"><?php echo $cc['checked_at'] ? date('d M Y', strtotime($cc['checked_at'])) : '—'; ?></td>
+                            <td class="px-4 py-3">
+                                <form method="POST" action="unit_actions.php">
+                                    <input type="hidden" name="action" value="check_completion">
+                                    <input type="hidden" name="student_id" value="<?php echo $cc['student_id']; ?>">
+                                    <input type="hidden" name="course_id" value="<?php echo $cc['course_id']; ?>">
+                                    <button type="submit" class="px-3 py-1.5 bg-slate-900 hover:bg-slate-700 text-white text-[10px] font-black uppercase rounded-lg">Check Now</button>
+                                </form>
+                            </td>
+                        </tr>
+                    <?php endwhile; endif; ?>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <?php endif; /* end view==completions */ ?>
+
         <?php if ($view == 'performance'):
             $is_excelling  = ($filter === 'excelling');
             $having_clause = $is_excelling ? 'HAVING avg_m >= 75' : 'HAVING avg_m < 40';
@@ -1425,6 +2086,35 @@ $filter = $_GET['filter'] ?? 'all';
             </div>
         </div>
 
+        <!-- Performance search bar — always visible for both Doing Well and At-Risk -->
+        <div class="flex items-center gap-3 mb-5 flex-wrap">
+            <div class="relative flex-1 min-w-[220px]">
+                <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+                <input type="text" id="perf-search" placeholder="Search student name or email..."
+                    oninput="filterPerf()"
+                    class="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-<?php echo $is_excelling ? 'emerald' : 'rose'; ?>-500 focus:border-<?php echo $is_excelling ? 'emerald' : 'rose'; ?>-400 transition-all shadow-sm">
+            </div>
+            <div id="perf-count" class="text-xs font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">
+                <?php echo count($perf_students); ?> student<?php echo count($perf_students) != 1 ? 's' : ''; ?>
+            </div>
+        </div>
+        <script>
+        function filterPerf() {
+            const q = (document.getElementById('perf-search')?.value||'').toLowerCase();
+            const cards = document.querySelectorAll('.perf-student-card');
+            let visible = 0;
+            cards.forEach(card => {
+                const name  = (card.dataset.name ||'').toLowerCase();
+                const email = (card.dataset.email||'').toLowerCase();
+                const show  = !q || name.includes(q) || email.includes(q);
+                card.style.display = show ? '' : 'none';
+                if (show) visible++;
+            });
+            const cnt = document.getElementById('perf-count');
+            if (cnt) cnt.textContent = visible + ' student' + (visible !== 1 ? 's' : '');
+        }
+        </script>
+
         <?php if (empty($perf_students)): ?>
         <div class="bg-white rounded-[2rem] border border-dashed border-slate-200 p-16 text-center">
             <i class="fa-solid <?php echo $icon; ?> text-slate-200 text-5xl mb-4"></i>
@@ -1432,6 +2122,7 @@ $filter = $_GET['filter'] ?? 'all';
             <p class="text-slate-400 text-xs mt-1">Students appear here once they have completed quizzes and their mastery is calculated.</p>
         </div>
         <?php else: ?>
+
         <div class="space-y-4">
         <?php foreach ($perf_students as $ps):
             $sid      = intval($ps['student_id']);
@@ -1458,7 +2149,9 @@ $filter = $_GET['filter'] ?? 'all';
                 }
             }
         ?>
-        <div class="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
+        <div class="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden perf-student-card"
+             data-name="<?php echo strtolower(htmlspecialchars($ps['full_name'])); ?>"
+             data-email="<?php echo strtolower(htmlspecialchars($ps['email'])); ?>">
             <!-- Student header -->
             <div class="px-6 py-5 flex items-center justify-between">
                 <div class="flex items-center gap-4">
@@ -1581,6 +2274,32 @@ $filter = $_GET['filter'] ?? 'all';
         function toggleModal(id) {
             const modal = document.getElementById(id);
             modal.style.display = (modal.style.display === "none") ? "flex" : "none";
+        }
+
+        // Move an existing unit to a different semester without a page-breaking nested form.
+        function submitUnitSemester(selectEl) {            const f = document.createElement('form');
+            f.method = 'POST';
+            f.action = 'unit_actions.php';
+            f.style.display = 'none';
+            const fields = {
+                action: 'update_unit_semester',
+                unit_id: selectEl.dataset.unitId,
+                semester_number: selectEl.value
+            };
+            for (const [name, value] of Object.entries(fields)) {
+                const inp = document.createElement('input');
+                inp.type = 'hidden'; inp.name = name; inp.value = value;
+                f.appendChild(inp);
+            }
+            document.body.appendChild(f);
+            f.submit();
+        }
+
+        function filterGradTable() {
+            const q = document.getElementById('gradSearch').value.toLowerCase();
+            document.querySelectorAll('#gradTable tbody tr[data-search]').forEach(row => {
+                row.style.display = row.dataset.search.includes(q) ? '' : 'none';
+            });
         }
     </script>
 </body>

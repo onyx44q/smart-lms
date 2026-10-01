@@ -196,6 +196,11 @@
         <div id="notif" class="notif-enter bg-blue-500 text-white px-6 py-3 rounded-2xl font-bold text-[10px] uppercase tracking-widest shadow-2xl flex items-center gap-2">
             <i class="fa-solid fa-right-from-bracket"></i> Successfully Logged Out.
         </div>
+        <?php elseif(($_GET['error'] ?? '') === 'locked'):
+            $waitMins = max(1, intval($_GET['wait'] ?? 15)); ?>
+        <div id="notif" class="notif-enter bg-amber-500 text-white px-6 py-3 rounded-2xl font-bold text-[10px] uppercase tracking-widest shadow-2xl flex items-center gap-2">
+            <i class="fa-solid fa-lock"></i> Too many failed attempts. Try again in <?php echo $waitMins; ?> minute<?php echo $waitMins === 1 ? '' : 's'; ?>.
+        </div>
         <?php elseif(isset($_GET['error']) || ($_GET['status']??'') === 'invalid'): ?>
         <div id="notif" class="notif-enter bg-red-500 text-white px-6 py-3 rounded-2xl font-bold text-[10px] uppercase tracking-widest shadow-2xl flex items-center gap-2">
             <i class="fa-solid fa-triangle-exclamation"></i> Invalid Login Credentials.
@@ -403,6 +408,9 @@
                         <button type="button" onclick="togglePwd()" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-all">
                             <i class="fa-solid fa-eye text-xs" id="eye-icon"></i>
                         </button>
+                    </div>
+                    <div class="text-right mt-1.5">
+                        <a href="forgot_password.php" class="text-[10px] font-bold text-blue-500 hover:text-blue-700 hover:underline">Forgot password?</a>
                     </div>
                 </div>
 

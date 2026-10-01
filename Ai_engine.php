@@ -352,8 +352,17 @@ function getLecturerDecisionData(int $lecturer_id, $conn): array
          ORDER BY r.student_id ASC, r.created_at ASC, r.id ASC"
     );
     $student_mastery = [];
+    // Course-scoped mirror of the same data — needed so the per-course
+    // "Course Health" cards only ever reflect activity that actually
+    // happened IN THAT COURSE. Without this, a single quiz taken in one
+    // course bled its mastery score into every other course card the
+    // lecturer teaches (e.g. a course with zero enrolments' worth of
+    // activity would still show a quiz average, borrowed from a
+    // completely different course).
+    $student_mastery_by_course = [];
     while ($row = mysqli_fetch_assoc($results_res)) {
         $sid   = intval($row['student_id']);
+        $cid   = intval($row['course_id']);
         $skill = !empty($row['skill_name']) ? $row['skill_name'] : _lect_infer_skill($row);
         $cur   = $student_mastery[$sid][$skill] ?? 0.0;
         $score = floatval($row['score']);
@@ -361,7 +370,12 @@ function getLecturerDecisionData(int $lecturer_id, $conn): array
         if ($score >= AI_SCORE_ADVANCE)                                $delta = AI_MASTERY_ADVANCE;
         elseif ($score >= AI_SCORE_RETRY && $att < AI_MAX_RETRIES)    $delta = AI_MASTERY_RETRY;
         else                                                           $delta = AI_MASTERY_REMEDIAL;
-        $student_mastery[$sid][$skill] = max(AI_MASTERY_FLOOR, min(AI_MASTERY_CAP, $cur + $delta));
+        $newMastery = max(AI_MASTERY_FLOOR, min(AI_MASTERY_CAP, $cur + $delta));
+        $student_mastery[$sid][$skill] = $newMastery;
+
+        $curByCourse = $student_mastery_by_course[$sid][$cid][$skill] ?? 0.0;
+        $student_mastery_by_course[$sid][$cid][$skill] =
+            max(AI_MASTERY_FLOOR, min(AI_MASTERY_CAP, $curByCourse + $delta));
     }
 
     // ── Fetch final exam / coursework marks from legacy student_marks table ──
@@ -371,15 +385,24 @@ function getLecturerDecisionData(int $lecturer_id, $conn): array
          WHERE student_id IN ($student_ids_str) AND course_id IN ($ids_str)"
     );
     $student_exam = [];
+    // Course-scoped mirror — same reasoning as $student_mastery_by_course
+    // above: the flat $student_exam (keyed only by student) was being used
+    // as a fallback for EVERY course's card, even ones the mark wasn't
+    // actually recorded against.
+    $student_exam_by_course = [];
     while ($r = mysqli_fetch_assoc($exam_res)) {
         $sid = intval($r['student_id']);
+        $cid = intval($r['course_id']);
         $ep  = floatval($r['exam_max'])       > 0 ? floatval($r['exam_mark'])       / floatval($r['exam_max'])       * 100 : null;
         $cp  = floatval($r['coursework_max']) > 0 ? floatval($r['coursework_mark']) / floatval($r['coursework_max']) * 100 : null;
         $comb = null;
         if ($ep !== null && $cp !== null)  $comb = $ep * 0.7 + $cp * 0.3;
         elseif ($ep !== null)              $comb = $ep;
         elseif ($cp !== null)              $comb = $cp;
-        if ($comb !== null) $student_exam[$sid] = round($comb, 1);
+        if ($comb !== null) {
+            $student_exam[$sid] = round($comb, 1);
+            $student_exam_by_course[$sid][$cid] = round($comb, 1);
+        }
     }
 
     // ── Fetch exam marks from the unit_marks system ──────────────────────
@@ -497,28 +520,36 @@ function getLecturerDecisionData(int $lecturer_id, $conn): array
         $q_avgs = [];
         $e_avgs = [];
         foreach ($c_sids as $sid) {
-            $skills = $student_mastery[$sid] ?? [];
+            // Use ONLY this student's mastery earned IN THIS COURSE — not
+            // their overall mastery across every course the lecturer
+            // teaches. Using the global figure here was why a course with
+            // zero actual activity could still show a quiz average, simply
+            // because the same student had done a quiz in a different course.
+            $skills = $student_mastery_by_course[$sid][$cid] ?? [];
             if (!empty($skills)) $q_avgs[] = array_sum($skills) / count($skills);
             // Per-course unit_marks exam takes priority — it is course-specific and accurate.
-            // Fall back to legacy student_marks only when no unit-level exam exists.
+            // Fall back to the legacy student_marks table ONLY when a mark was
+            // actually recorded for THIS course (not just recorded somewhere).
             if (isset($student_unit_exam_by_course[$sid][$cid])) {
                 $e_avgs[] = $student_unit_exam_by_course[$sid][$cid];
-            } elseif (isset($student_exam[$sid])) {
-                $e_avgs[] = $student_exam[$sid];
+            } elseif (isset($student_exam_by_course[$sid][$cid])) {
+                $e_avgs[] = $student_exam_by_course[$sid][$cid];
             }
         }
-        $q_avg = !empty($q_avgs) ? round(array_sum($q_avgs) / count($q_avgs), 1) : 0;
+        $q_avg = !empty($q_avgs) ? round(array_sum($q_avgs) / count($q_avgs), 1) : null;
         $e_avg = !empty($e_avgs) ? round(array_sum($e_avgs) / count($e_avgs), 1) : null;
-        $c_avg = $e_avg !== null ? round($q_avg * 0.6 + $e_avg * 0.4, 1) : $q_avg;
+        $hasActivity = $q_avg !== null || $e_avg !== null;
+        $c_avg = $e_avg !== null ? round(($q_avg ?? 0) * 0.6 + $e_avg * 0.4, 1) : $q_avg;
 
         $class_summary[] = [
             'course_id'    => $cid,
             'title'        => $ctitle,
             'enrolled'     => $enroll_counts[$cid] ?? 0,
+            'has_activity' => $hasActivity,
             'avg_mastery'  => $q_avg,
             'avg_exam'     => $e_avg,
             'combined_avg' => $c_avg,
-            'health'       => $c_avg >= 65 ? 'good' : ($c_avg >= 40 ? 'moderate' : 'poor'),
+            'health'       => !$hasActivity ? 'no_activity' : ($c_avg >= 65 ? 'good' : ($c_avg >= 40 ? 'moderate' : 'poor')),
         ];
     }
 
@@ -531,6 +562,176 @@ function getLecturerDecisionData(int $lecturer_id, $conn): array
         'skill_averages'   => $skill_averages,
         'class_summary'    => $class_summary,
         'class_avg'        => $class_avg,
+    ];
+}
+
+// ─────────────────────────────────────────────────────────────────────
+//  RULE CONFIGURATION (for display on the Rule Configuration page)
+//  Returns the live thresholds/constants the engine runs on, so the
+//  administrator can see exactly what drives the AI's decisions.
+// ─────────────────────────────────────────────────────────────────────
+function getRuleConfiguration(): array
+{
+    return [
+        'quiz_rules' => [
+            ['condition' => 'Quiz Score ≥ ' . AI_SCORE_ADVANCE . '%', 'action' => 'Advance', 'detail' => '+' . AI_MASTERY_ADVANCE . ' mastery points, next quiz set to advanced difficulty'],
+            ['condition' => 'Quiz Score ' . AI_SCORE_RETRY . '–' . (AI_SCORE_ADVANCE - 1) . '%', 'action' => 'Retry', 'detail' => '+' . AI_MASTERY_RETRY . ' mastery points, next quiz set to intermediate difficulty'],
+            ['condition' => 'Quiz Score < ' . AI_SCORE_RETRY . '%', 'action' => 'Remedial', 'detail' => round(AI_MASTERY_REMEDIAL, 1) . ' mastery points, next quiz set to beginner difficulty'],
+            ['condition' => 'Retry attempts ≥ ' . AI_MAX_RETRIES, 'action' => 'Force Remedial', 'detail' => 'Overrides the Retry rule regardless of score once the attempt cap is reached'],
+        ],
+        'performance_bands' => [
+            ['condition' => 'Average mastery ≥ 75%', 'band' => 'Excellent'],
+            ['condition' => 'Average mastery 55–74%', 'band' => 'Good'],
+            ['condition' => 'Average mastery 35–54%', 'band' => 'At Risk'],
+            ['condition' => 'Average mastery < 35%', 'band' => 'Critical'],
+        ],
+        'other_rules' => [
+            ['condition' => 'Attendance below 66.7% (absence > 33.3%)', 'action' => 'Attendance Alert — student flagged BARRED from exam'],
+            ['condition' => 'Assignment not submitted by deadline', 'action' => 'Submission Reminder'],
+            ['condition' => 'Mastery below a career-path skill target', 'action' => 'Revision Recommendation — skill gap listed with current vs target %'],
+        ],
+        'mastery_bounds' => ['floor' => AI_MASTERY_FLOOR, 'cap' => AI_MASTERY_CAP],
+    ];
+}
+
+// ─────────────────────────────────────────────────────────────────────
+//  RISK DASHBOARD DATA
+//  Buckets every in-scope student into Excellent / Good / At Risk /
+//  Critical using quiz mastery, attendance and assignment completion,
+//  and returns a flat per-student table for the "View At-Risk Students"
+//  drill-down. Pass $course_ids = null for the full institution (admin);
+//  pass an array of course ids to scope to a lecturer's own courses.
+// ─────────────────────────────────────────────────────────────────────
+function getRiskDashboardData($conn, ?array $course_ids = null): array
+{
+    $empty = ['distribution' => ['excellent' => 0, 'good' => 0, 'at_risk' => 0, 'critical' => 0], 'students' => []];
+
+    $course_filter = '';
+    if ($course_ids !== null) {
+        $course_ids = array_map('intval', $course_ids);
+        if (empty($course_ids)) return $empty;
+        $ids_str = implode(',', $course_ids);
+        $course_filter = "AND e.course_id IN ($ids_str)";
+    }
+
+    $students_res = mysqli_query($conn, "
+        SELECT DISTINCT u.id, u.full_name, u.email
+        FROM users u
+        JOIN enrollments e ON e.student_id = u.id
+        WHERE u.role = 'student' $course_filter
+    ");
+    $students = [];
+    while ($r = mysqli_fetch_assoc($students_res)) $students[intval($r['id'])] = $r;
+    if (empty($students)) return $empty;
+
+    $ids_str = implode(',', array_keys($students));
+
+    // Quiz mastery average per student
+    $mastery_res = mysqli_query($conn,
+        "SELECT student_id, AVG(mastery_level) AS avg_m FROM student_mastery
+         WHERE student_id IN ($ids_str) GROUP BY student_id"
+    );
+    $quiz_avg = [];
+    while ($r = mysqli_fetch_assoc($mastery_res)) $quiz_avg[intval($r['student_id'])] = round(floatval($r['avg_m']), 1);
+
+    // Attendance % per student (across all their units)
+    $att_res = mysqli_query($conn,
+        "SELECT student_id, SUM(attended) AS att, SUM(total_sessions) AS tot
+         FROM v_student_attendance WHERE student_id IN ($ids_str) GROUP BY student_id"
+    );
+    $attendance = [];
+    while ($r = mysqli_fetch_assoc($att_res)) {
+        $tot = floatval($r['tot']);
+        $attendance[intval($r['student_id'])] = $tot > 0 ? round(floatval($r['att']) / $tot * 100, 1) : null;
+    }
+
+    // Assignment submission % per student (submitted / assigned, within scope)
+    $assign_res = mysqli_query($conn,
+        "SELECT e.student_id, COUNT(DISTINCT a.id) AS total_assign, COUNT(DISTINCT s.id) AS submitted
+         FROM enrollments e
+         JOIN assignments a ON a.course_id = e.course_id
+         LEFT JOIN assignment_submissions s ON s.assignment_id = a.id AND s.student_id = e.student_id
+         WHERE e.student_id IN ($ids_str) $course_filter
+         GROUP BY e.student_id"
+    );
+    $assignment_pct = [];
+    while ($r = mysqli_fetch_assoc($assign_res)) {
+        $tot = intval($r['total_assign']);
+        $assignment_pct[intval($r['student_id'])] = $tot > 0 ? round(intval($r['submitted']) / $tot * 100, 1) : null;
+    }
+
+    $distribution = ['excellent' => 0, 'good' => 0, 'at_risk' => 0, 'critical' => 0];
+    $rows = [];
+    foreach ($students as $sid => $s) {
+        $qa = $quiz_avg[$sid] ?? 0.0;
+        $at = $attendance[$sid] ?? null;
+        $ap = $assignment_pct[$sid] ?? null;
+
+        $parts = [$qa];
+        if ($at !== null) $parts[] = $at;
+        if ($ap !== null) $parts[] = $ap;
+        $composite = round(array_sum($parts) / count($parts), 1);
+
+        if ($composite >= 75)      $band = 'excellent';
+        elseif ($composite >= 55)  $band = 'good';
+        elseif ($composite >= 35)  $band = 'at_risk';
+        else                       $band = 'critical';
+        $distribution[$band]++;
+
+        $rows[] = [
+            'student_id' => $sid,
+            'name'       => $s['full_name'],
+            'email'      => $s['email'],
+            'attendance' => $at,
+            'quiz_avg'   => $qa,
+            'assignment' => $ap,
+            'composite'  => $composite,
+            'band'       => $band,
+            'risk'       => $band === 'critical' ? 'HIGH' : ($band === 'at_risk' ? 'MEDIUM' : 'LOW'),
+        ];
+    }
+    usort($rows, fn($a, $b) => $a['composite'] <=> $b['composite']);
+
+    return ['distribution' => $distribution, 'students' => $rows];
+}
+
+// ─────────────────────────────────────────────────────────────────────
+//  RECOMMENDATION FEEDBACK EVALUATION
+//  Aggregate "Was this recommendation helpful?" votes from the results
+//  table for the evaluation report (# generated / # helpful / % accepted).
+// ─────────────────────────────────────────────────────────────────────
+function getRecommendationEvaluation($conn, ?array $course_ids = null): array
+{
+    $course_join = '';
+    if ($course_ids !== null) {
+        $course_ids = array_map('intval', $course_ids);
+        if (empty($course_ids)) {
+            return ['generated' => 0, 'helpful' => 0, 'not_helpful' => 0, 'unrated' => 0, 'acceptance_pct' => 0];
+        }
+        $ids_str = implode(',', $course_ids);
+        $course_join = "JOIN quizzes q ON q.id = r.quiz_id AND q.course_id IN ($ids_str)";
+    }
+
+    @mysqli_query($conn, "ALTER TABLE results ADD COLUMN IF NOT EXISTS helpful ENUM('yes','no') DEFAULT NULL");
+
+    $res = mysqli_fetch_assoc(mysqli_query($conn,
+        "SELECT COUNT(*) AS generated,
+                SUM(CASE WHEN r.helpful = 'yes' THEN 1 ELSE 0 END) AS helpful,
+                SUM(CASE WHEN r.helpful = 'no'  THEN 1 ELSE 0 END) AS not_helpful
+         FROM results r $course_join"
+    ));
+
+    $generated   = intval($res['generated'] ?? 0);
+    $helpful     = intval($res['helpful'] ?? 0);
+    $not_helpful = intval($res['not_helpful'] ?? 0);
+    $rated       = $helpful + $not_helpful;
+
+    return [
+        'generated'      => $generated,
+        'helpful'        => $helpful,
+        'not_helpful'    => $not_helpful,
+        'unrated'        => $generated - $rated,
+        'acceptance_pct' => $rated > 0 ? round($helpful / $rated * 100, 1) : 0,
     ];
 }
 

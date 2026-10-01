@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Jul 16, 2026 at 01:21 PM
+-- Generation Time: Aug 12, 2026 at 10:22 AM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.0.30
 
@@ -137,6 +137,13 @@ CREATE TABLE `boarding_allocations` (
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+--
+-- Dumping data for table `boarding_allocations`
+--
+
+INSERT INTO `boarding_allocations` (`id`, `student_id`, `dorm_id`, `room_id`, `bed_number`, `academic_year`, `semester`, `check_in_date`, `check_out_date`, `status`, `allocated_by`, `notes`, `created_at`) VALUES
+(1, 1, 28, NULL, 'B1', '2026/2027', 'Full Year', '2026-08-12', NULL, 'active', 17, 'Keep clean', '2026-08-12 08:08:32');
+
 -- --------------------------------------------------------
 
 --
@@ -208,6 +215,13 @@ CREATE TABLE `boarding_notices` (
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+--
+-- Dumping data for table `boarding_notices`
+--
+
+INSERT INTO `boarding_notices` (`id`, `title`, `message`, `target`, `dorm_id`, `priority`, `posted_by`, `is_active`, `created_at`) VALUES
+(1, 'Inspection', 'Clean', 'all', NULL, 'urgent', 17, 1, '2026-08-12 08:09:27');
+
 -- --------------------------------------------------------
 
 --
@@ -222,6 +236,83 @@ CREATE TABLE `boarding_rooms` (
   `floor` int(11) DEFAULT 1,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `classes`
+--
+
+CREATE TABLE `classes` (
+  `id` int(11) NOT NULL,
+  `class_code` varchar(20) NOT NULL,
+  `category` enum('Education','Technical','Business','Nursing') NOT NULL,
+  `capacity` int(11) NOT NULL DEFAULT 40,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `classes`
+--
+
+INSERT INTO `classes` (`id`, `class_code`, `category`, `capacity`, `created_at`) VALUES
+(1, 'SE_1', 'Education', 70, '2026-08-12 07:59:55'),
+(2, 'SE_2', 'Education', 70, '2026-08-12 07:59:55'),
+(3, 'SE_3', 'Education', 70, '2026-08-12 07:59:55'),
+(4, 'SE_4', 'Education', 70, '2026-08-12 07:59:55'),
+(5, 'SE_5', 'Education', 70, '2026-08-12 07:59:55'),
+(6, 'SE_6', 'Education', 70, '2026-08-12 07:59:55'),
+(7, 'SE_7', 'Education', 70, '2026-08-12 07:59:55'),
+(8, 'SE_8', 'Education', 70, '2026-08-12 07:59:55'),
+(9, 'SE_9', 'Education', 70, '2026-08-12 07:59:55'),
+(10, 'SE_10', 'Education', 70, '2026-08-12 07:59:55'),
+(11, 'ST_1', 'Technical', 70, '2026-08-12 07:59:55'),
+(12, 'ST_2', 'Technical', 70, '2026-08-12 07:59:55'),
+(13, 'ST_3', 'Technical', 70, '2026-08-12 07:59:55'),
+(14, 'ST_4', 'Technical', 70, '2026-08-12 07:59:55'),
+(15, 'ST_5', 'Technical', 70, '2026-08-12 07:59:55'),
+(16, 'ST_6', 'Technical', 70, '2026-08-12 07:59:55'),
+(17, 'ST_7', 'Technical', 70, '2026-08-12 07:59:55'),
+(18, 'ST_8', 'Technical', 70, '2026-08-12 07:59:55'),
+(19, 'ST_9', 'Technical', 70, '2026-08-12 07:59:55'),
+(20, 'ST_10', 'Technical', 70, '2026-08-12 07:59:55'),
+(21, 'SB_1', 'Business', 70, '2026-08-12 07:59:55'),
+(22, 'SB_2', 'Business', 70, '2026-08-12 07:59:55'),
+(23, 'SB_3', 'Business', 70, '2026-08-12 07:59:55'),
+(24, 'SB_4', 'Business', 70, '2026-08-12 07:59:55'),
+(25, 'SB_5', 'Business', 70, '2026-08-12 07:59:55'),
+(26, 'SB_6', 'Business', 70, '2026-08-12 07:59:55'),
+(27, 'SB_7', 'Business', 70, '2026-08-12 07:59:55'),
+(28, 'SB_8', 'Business', 70, '2026-08-12 07:59:55'),
+(29, 'SB_9', 'Business', 70, '2026-08-12 07:59:55'),
+(30, 'SB_10', 'Business', 70, '2026-08-12 07:59:55'),
+(31, 'SN_1', 'Nursing', 70, '2026-08-12 07:59:55'),
+(32, 'SN_2', 'Nursing', 70, '2026-08-12 07:59:55'),
+(33, 'SN_3', 'Nursing', 70, '2026-08-12 07:59:55'),
+(34, 'SN_4', 'Nursing', 70, '2026-08-12 07:59:55'),
+(35, 'SN_5', 'Nursing', 70, '2026-08-12 07:59:55');
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `class_allocations`
+--
+
+CREATE TABLE `class_allocations` (
+  `id` int(11) NOT NULL,
+  `student_id` int(11) NOT NULL,
+  `class_id` int(11) NOT NULL,
+  `allocated_by` int(11) DEFAULT NULL,
+  `allocated_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `status` enum('active','transferred','removed') NOT NULL DEFAULT 'active'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `class_allocations`
+--
+
+INSERT INTO `class_allocations` (`id`, `student_id`, `class_id`, `allocated_by`, `allocated_at`, `status`) VALUES
+(1, 1, 11, 4, '2026-08-12 08:16:00', 'active');
 
 -- --------------------------------------------------------
 
@@ -244,7 +335,11 @@ CREATE TABLE `courses` (
 INSERT INTO `courses` (`id`, `title`, `description`, `lecturer_id`, `skill_category`) VALUES
 (1, 'Data Science', NULL, 5, NULL),
 (3, 'Software Engineering', NULL, 9, NULL),
-(4, 'Computer science', NULL, NULL, NULL);
+(4, 'Computer science', NULL, NULL, NULL),
+(5, 'Education', 'Auto-created course category', NULL, 'Education'),
+(6, 'Technical Courses', 'Auto-created course category', NULL, 'Technical'),
+(7, 'Business Courses', 'Auto-created course category', NULL, 'Business'),
+(8, 'Nursing', 'Auto-created course category', NULL, 'Nursing');
 
 -- --------------------------------------------------------
 
@@ -268,7 +363,8 @@ CREATE TABLE `course_units` (
 
 INSERT INTO `course_units` (`id`, `course_id`, `title`, `unit_code`, `description`, `lecturer_id`, `created_at`) VALUES
 (1, 1, 'Artificial Intelligence', 'DSC-101', 'Foundations of AI, machine learning and intelligent agents', 5, '2026-04-28 18:39:22'),
-(2, 3, 'Introduction', 'SF-101', 'This is introduction', 9, '2026-04-30 18:05:03');
+(2, 3, 'Introduction', 'SF-101', 'This is introduction', 9, '2026-04-30 18:05:03'),
+(3, 6, 'Coding', 'CD01', 'JUST CODING', 5, '2026-08-12 08:17:34');
 
 -- --------------------------------------------------------
 
@@ -289,7 +385,8 @@ CREATE TABLE `enrollments` (
 
 INSERT INTO `enrollments` (`id`, `student_id`, `course_id`, `enroll_date`) VALUES
 (3, 1, 1, '2026-04-12 13:20:43'),
-(8, 1, 3, '2026-05-01 13:58:05');
+(8, 1, 3, '2026-05-01 13:58:05'),
+(9, 1, 6, '2026-08-12 11:14:14');
 
 -- --------------------------------------------------------
 
@@ -399,6 +496,7 @@ CREATE TABLE `hr_announcements` (
 CREATE TABLE `hr_leave_requests` (
   `id` int(11) NOT NULL,
   `staff_id` int(11) NOT NULL,
+  `user_id` int(11) DEFAULT NULL,
   `leave_type` enum('annual','sick','maternity','paternity','emergency','unpaid','other') DEFAULT 'annual',
   `start_date` date NOT NULL,
   `end_date` date NOT NULL,
@@ -493,6 +591,18 @@ CREATE TABLE `hr_staff` (
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+--
+-- Dumping data for table `hr_staff`
+--
+
+INSERT INTO `hr_staff` (`id`, `user_id`, `staff_no`, `full_name`, `email`, `phone`, `gender`, `date_of_birth`, `national_id`, `department`, `job_title`, `job_type`, `employment_date`, `termination_date`, `status`, `basic_salary`, `allowances`, `deductions`, `bank_name`, `bank_account`, `emergency_contact`, `emergency_phone`, `address`, `profile_notes`, `created_by`, `created_at`, `updated_at`) VALUES
+(1, 17, 'STF-2026-0001', 'Boarding Master', 'boarding@smartlms.com', NULL, NULL, NULL, NULL, 'Student Affairs', 'Boarding Master', 'full_time', '2026-08-12', NULL, 'active', 0.00, 0.00, 0.00, NULL, NULL, NULL, NULL, NULL, NULL, 17, '2026-08-12 08:10:12', '2026-08-12 08:10:12'),
+(2, 4, 'STF-2026-0002', 'System Admin', 'admin@smartlms.com', NULL, NULL, NULL, NULL, 'Administration', 'System Administrator', 'full_time', '2026-04-12', NULL, 'active', 0.00, 0.00, 0.00, NULL, NULL, NULL, NULL, NULL, NULL, 18, '2026-08-12 08:10:33', '2026-08-12 08:10:33'),
+(3, 5, 'STF-2026-0003', 'Dr.smith', 'smith@gmail.com', NULL, NULL, NULL, NULL, 'Academics', 'Lecturer', 'full_time', '2026-04-12', NULL, 'active', 0.00, 0.00, 0.00, NULL, NULL, NULL, NULL, NULL, NULL, 18, '2026-08-12 08:10:33', '2026-08-12 08:10:33'),
+(4, 9, 'STF-2026-0004', 'Lenny', 'lenny@gmail.com', NULL, NULL, NULL, NULL, 'Academics', 'Lecturer', 'full_time', '2026-04-30', NULL, 'active', 0.00, 0.00, 0.00, NULL, NULL, NULL, NULL, NULL, NULL, 18, '2026-08-12 08:10:33', '2026-08-12 08:10:33'),
+(5, 12, 'STF-2026-0005', 'Finance Office', 'finance@smartlms.com', NULL, NULL, NULL, NULL, 'Finance', 'Financial Accountant', 'full_time', '2026-05-18', NULL, 'active', 0.00, 0.00, 0.00, NULL, NULL, NULL, NULL, NULL, NULL, 18, '2026-08-12 08:10:33', '2026-08-12 08:10:33'),
+(6, 18, 'STF-2026-0006', 'HR Manager', 'hr@smartlms.com', NULL, NULL, NULL, NULL, 'Human Resources', 'HR Manager', 'full_time', '2026-08-12', NULL, 'active', 0.00, 0.00, 0.00, NULL, NULL, NULL, NULL, NULL, NULL, 18, '2026-08-12 08:10:33', '2026-08-12 08:10:33');
+
 -- --------------------------------------------------------
 
 --
@@ -518,7 +628,8 @@ INSERT INTO `materials` (`id`, `course_id`, `unit_id`, `lecturer_id`, `title`, `
 (1, 1, 1, 5, 'Week1', 'pdf', 'uploads/notes/1775987401_Sustainable_AI.pdf', '2026-04-12 09:50:01'),
 (2, 1, 1, 5, 'week2', 'video', 'uploads/videos/1775990414_Presentations_mad_2025_11_16_022055.mp4', '2026-04-12 10:40:14'),
 (3, 1, 1, 5, 'Week 3 Intelligence Agents', 'pdf', 'uploads/notes/1776178025_Intelligent_Agents.pdf', '2026-04-14 14:47:05'),
-(6, 3, 2, 9, 'Requirements engineering', 'pdf', 'uploads/notes/1777612537_Lecture_3-_Requirements_Engineering.pdf', '2026-05-01 05:15:37');
+(6, 3, 2, 9, 'Requirements engineering', 'pdf', 'uploads/notes/1777612537_Lecture_3-_Requirements_Engineering.pdf', '2026-05-01 05:15:37'),
+(7, 6, 3, 5, 'Beginning', 'pdf', 'uploads/notes/1786522876_1.a.Concept1of6-DB_Transactions_in_Business_Processes-LectureNotes.pdf', '2026-08-12 08:21:16');
 
 -- --------------------------------------------------------
 
@@ -705,7 +816,8 @@ CREATE TABLE `results` (
   `predicted_grade` char(1) DEFAULT NULL,
   `difficulty_next` varchar(20) DEFAULT NULL,
   `attempt_no` int(11) DEFAULT 1,
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `helpful` enum('yes','no') DEFAULT NULL COMMENT 'Student feedback: was this AI recommendation helpful?'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
@@ -876,8 +988,8 @@ CREATE TABLE `student_fee_assignments` (
 --
 
 INSERT INTO `student_fee_assignments` (`id`, `student_id`, `fee_structure_id`, `total_amount`, `discount_amount`, `discount_reason`, `net_amount`, `academic_year`, `semester`, `due_date`, `status`, `assigned_by`, `assigned_at`) VALUES
-(1, 1, 1, 45000.00, 0.00, '', 45000.00, '2025/2026', 'Semester 1', '2026-06-18', 'pending', 12, '2026-05-18 09:31:14'),
-(2, 1, 3, 3500.00, 0.00, '', 3500.00, '2025/2026', 'Full Year', '2026-06-18', 'pending', 12, '2026-05-18 09:36:20');
+(1, 1, 1, 45000.00, 0.00, '', 45000.00, '2025/2026', 'Semester 1', '2026-06-18', 'paid', 12, '2026-05-18 09:31:14'),
+(2, 1, 3, 3500.00, 0.00, '', 3500.00, '2025/2026', 'Full Year', '2026-06-18', 'paid', 12, '2026-05-18 09:36:20');
 
 -- --------------------------------------------------------
 
@@ -925,9 +1037,9 @@ CREATE TABLE `student_mastery` (
 --
 
 INSERT INTO `student_mastery` (`id`, `student_id`, `course_id`, `skill_name`, `mastery_level`, `last_updated`) VALUES
-(385, 1, NULL, 'General Aptitude', 25.50, '2026-05-18 09:24:32'),
-(386, 1, NULL, 'Practical Application', 3.20, '2026-05-18 09:24:32'),
-(387, 1, NULL, 'Core Theory', 17.00, '2026-05-18 09:24:33');
+(385, 1, NULL, 'General Aptitude', 25.50, '2026-08-12 08:17:44'),
+(386, 1, NULL, 'Practical Application', 3.20, '2026-08-12 08:17:44'),
+(387, 1, NULL, 'Core Theory', 17.00, '2026-08-12 08:17:44');
 
 -- --------------------------------------------------------
 
@@ -1021,7 +1133,8 @@ CREATE TABLE `unit_registrations` (
 
 INSERT INTO `unit_registrations` (`id`, `student_id`, `unit_id`, `registered_at`) VALUES
 (1, 1, 1, '2026-04-28 18:44:49'),
-(4, 1, 2, '2026-05-01 10:58:05');
+(4, 1, 2, '2026-05-01 10:58:05'),
+(9, 1, 3, '2026-08-12 08:17:34');
 
 -- --------------------------------------------------------
 
@@ -1033,6 +1146,7 @@ CREATE TABLE `users` (
   `id` int(11) NOT NULL,
   `full_name` varchar(100) NOT NULL,
   `email` varchar(100) NOT NULL,
+  `admission_number` varchar(30) DEFAULT NULL,
   `password` varchar(255) NOT NULL,
   `role` enum('student','lecturer','admin','financial_accountant','boarding_master','hr_manager') NOT NULL DEFAULT 'student',
   `course_id` int(11) DEFAULT NULL,
@@ -1044,14 +1158,14 @@ CREATE TABLE `users` (
 -- Dumping data for table `users`
 --
 
-INSERT INTO `users` (`id`, `full_name`, `email`, `password`, `role`, `course_id`, `career_path`, `created_at`) VALUES
-(1, 'Onyx Courtney', 'onyxcakech@gmail.com', '$2y$10$tqFkEQBk0iK.hsyVHVtis.bms/WrdhRdsLQ7ze/jO3kdaQDsph3tW', 'student', NULL, 'Software Development', '2026-04-11 20:58:11'),
-(4, 'System Admin', 'admin@smartlms.com', '$2y$10$.0OcfG4sTRsAOCtxn8iar.okY99T57aQvvMlv.yNYBNdmCbfViUtm', 'admin', NULL, 'General Software Engineering', '2026-04-11 21:45:41'),
-(5, 'Dr.smith', 'smith@gmail.com', '$2y$10$fZ1f6rlrYqK2LDDUM5DQxe2NWJbSRqjcVMchKntrQKTDgrf8Dk5hO', 'lecturer', 1, 'General Software Engineering', '2026-04-11 22:17:33'),
-(9, 'Lenny', 'lenny@gmail.com', '$2y$10$zISpLktT6AecVDh54Ugvqer4pvCa6fzYAEJchUoAtFfY9KrnKPsWa', 'lecturer', 3, 'General Software Engineering', '2026-04-30 18:02:11'),
-(12, 'Finance Office', 'finance@smartlms.com', '$2y$10$.A.HAqAdJVcR8Kqn/VFO7u/aDcEKYi0ZN6dEtj7IZ.HmMeyvyUC26', 'financial_accountant', NULL, 'General Software Engineering', '2026-05-18 09:29:22'),
-(13, 'Boarding Master', 'boarding@smartlms.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'boarding_master', NULL, 'General Software Engineering', '2026-07-16 11:20:20'),
-(14, 'HR Manager', 'hr@smartlms.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'hr_manager', NULL, 'General Software Engineering', '2026-07-16 11:20:20');
+INSERT INTO `users` (`id`, `full_name`, `email`, `admission_number`, `password`, `role`, `course_id`, `career_path`, `created_at`) VALUES
+(1, 'Onyx Courtney', 'onyxcakech@gmail.com', '136261', '$2y$10$tqFkEQBk0iK.hsyVHVtis.bms/WrdhRdsLQ7ze/jO3kdaQDsph3tW', 'student', NULL, 'Software Development', '2026-04-11 20:58:11'),
+(4, 'System Admin', 'admin@smartlms.com', NULL, '$2y$10$.0OcfG4sTRsAOCtxn8iar.okY99T57aQvvMlv.yNYBNdmCbfViUtm', 'admin', NULL, 'General Software Engineering', '2026-04-11 21:45:41'),
+(5, 'Dr.smith', 'smith@gmail.com', NULL, '$2y$10$fZ1f6rlrYqK2LDDUM5DQxe2NWJbSRqjcVMchKntrQKTDgrf8Dk5hO', 'lecturer', 1, 'General Software Engineering', '2026-04-11 22:17:33'),
+(9, 'Lenny', 'lenny@gmail.com', NULL, '$2y$10$zISpLktT6AecVDh54Ugvqer4pvCa6fzYAEJchUoAtFfY9KrnKPsWa', 'lecturer', 3, 'General Software Engineering', '2026-04-30 18:02:11'),
+(12, 'Finance Office', 'finance@smartlms.com', NULL, '$2y$10$.A.HAqAdJVcR8Kqn/VFO7u/aDcEKYi0ZN6dEtj7IZ.HmMeyvyUC26', 'financial_accountant', NULL, 'General Software Engineering', '2026-05-18 09:29:22'),
+(17, 'Boarding Master', 'boarding@smartlms.com', NULL, '$2y$10$ZqN7fF4xNirzZXjw9FOHee.dnimhlLhGXdy3TmHcgXqmkKaBNqEb.', 'boarding_master', NULL, 'General Software Engineering', '2026-08-12 08:07:10'),
+(18, 'HR Manager', 'hr@smartlms.com', NULL, '$2y$10$tQ70e76lcO/ELq4TwfGVnu5t5XCZAlTDWtRoF9MzJ37xqVYJuLOZu', 'hr_manager', NULL, 'General Software Engineering', '2026-08-12 08:07:10');
 
 -- --------------------------------------------------------
 
@@ -1134,7 +1248,8 @@ ALTER TABLE `boarding_allocations`
 -- Indexes for table `boarding_dorms`
 --
 ALTER TABLE `boarding_dorms`
-  ADD PRIMARY KEY (`id`);
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uq_dorm_name_gender` (`name`,`gender`);
 
 --
 -- Indexes for table `boarding_notices`
@@ -1148,6 +1263,22 @@ ALTER TABLE `boarding_notices`
 ALTER TABLE `boarding_rooms`
   ADD PRIMARY KEY (`id`),
   ADD KEY `dorm_id` (`dorm_id`);
+
+--
+-- Indexes for table `classes`
+--
+ALTER TABLE `classes`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uq_class_code` (`class_code`);
+
+--
+-- Indexes for table `class_allocations`
+--
+ALTER TABLE `class_allocations`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `student_id` (`student_id`),
+  ADD KEY `class_id` (`class_id`),
+  ADD KEY `status` (`status`);
 
 --
 -- Indexes for table `courses`
@@ -1363,6 +1494,7 @@ ALTER TABLE `unit_registrations`
 ALTER TABLE `users`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `email` (`email`),
+  ADD UNIQUE KEY `uq_admission_number` (`admission_number`),
   ADD KEY `fk_course` (`course_id`);
 
 --
@@ -1397,19 +1529,19 @@ ALTER TABLE `attendance_sessions`
 -- AUTO_INCREMENT for table `boarding_allocations`
 --
 ALTER TABLE `boarding_allocations`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
 
 --
 -- AUTO_INCREMENT for table `boarding_dorms`
 --
 ALTER TABLE `boarding_dorms`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=32;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=311;
 
 --
 -- AUTO_INCREMENT for table `boarding_notices`
 --
 ALTER TABLE `boarding_notices`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
 
 --
 -- AUTO_INCREMENT for table `boarding_rooms`
@@ -1418,22 +1550,34 @@ ALTER TABLE `boarding_rooms`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
+-- AUTO_INCREMENT for table `classes`
+--
+ALTER TABLE `classes`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2801;
+
+--
+-- AUTO_INCREMENT for table `class_allocations`
+--
+ALTER TABLE `class_allocations`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+
+--
 -- AUTO_INCREMENT for table `courses`
 --
 ALTER TABLE `courses`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=5;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
 
 --
 -- AUTO_INCREMENT for table `course_units`
 --
 ALTER TABLE `course_units`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
 
 --
 -- AUTO_INCREMENT for table `enrollments`
 --
 ALTER TABLE `enrollments`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=10;
 
 --
 -- AUTO_INCREMENT for table `fee_payments`
@@ -1481,13 +1625,13 @@ ALTER TABLE `hr_performance`
 -- AUTO_INCREMENT for table `hr_staff`
 --
 ALTER TABLE `hr_staff`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
 
 --
 -- AUTO_INCREMENT for table `materials`
 --
 ALTER TABLE `materials`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=8;
 
 --
 -- AUTO_INCREMENT for table `notifications`
@@ -1505,13 +1649,13 @@ ALTER TABLE `plagiarism_reports`
 -- AUTO_INCREMENT for table `questions`
 --
 ALTER TABLE `questions`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=320;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=325;
 
 --
 -- AUTO_INCREMENT for table `quizzes`
 --
 ALTER TABLE `quizzes`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=71;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=72;
 
 --
 -- AUTO_INCREMENT for table `results`
@@ -1553,7 +1697,7 @@ ALTER TABLE `student_marks`
 -- AUTO_INCREMENT for table `student_mastery`
 --
 ALTER TABLE `student_mastery`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=691;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=730;
 
 --
 -- AUTO_INCREMENT for table `student_performance_logs`
@@ -1577,13 +1721,13 @@ ALTER TABLE `unit_marks`
 -- AUTO_INCREMENT for table `unit_registrations`
 --
 ALTER TABLE `unit_registrations`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=13;
 
 --
 -- AUTO_INCREMENT for table `users`
 --
 ALTER TABLE `users`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=15;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=19;
 
 --
 -- Constraints for dumped tables

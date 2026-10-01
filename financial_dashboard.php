@@ -3,7 +3,9 @@ if (session_status() === PHP_SESSION_NONE) session_start();
 include 'config.php';
 
 if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'financial_accountant') {
-    header("Location: index.php");
+    session_unset();
+    session_destroy();
+    header("Location: index.php?error=unauthorized");
     exit();
 }
 
@@ -79,6 +81,18 @@ if (isset($_POST['action']) && $_POST['action'] === 'bulk_assign') {
     exit();
 }
 
+// 3b. Review a Refund Request (approve / reject / mark paid)
+if (isset($_POST['action']) && $_POST['action'] === 'review_refund') {
+    $refund_id   = intval($_POST['refund_id'] ?? 0);
+    $new_status  = in_array($_POST['new_status'] ?? '', ['approved','rejected','paid']) ? $_POST['new_status'] : '';
+    $review_note = mysqli_real_escape_string($conn, trim($_POST['review_notes'] ?? ''));
+    if ($refund_id && $new_status) {
+        mysqli_query($conn, "UPDATE refund_requests SET status='$new_status', review_notes='$review_note', reviewed_by=$fa_id WHERE id=$refund_id");
+    }
+    header("Location: financial_dashboard.php?tab=refunds&msg=Refund+request+updated");
+    exit();
+}
+
 // 4. Record Payment
 if (isset($_POST['action']) && $_POST['action'] === 'record_payment') {
     $student_id   = intval($_POST['student_id']);
@@ -94,6 +108,7 @@ if (isset($_POST['action']) && $_POST['action'] === 'record_payment') {
     mysqli_query($conn, "INSERT INTO fee_payments 
         (student_id, fee_assignment_id, amount_paid, payment_method, transaction_ref, receipt_number, notes, payment_date, recorded_by)
         VALUES ($student_id," . ($assign_val === 'NULL' ? 'NULL' : $assign_val) . ",$amount_paid,'$method','$txn_ref','$receipt','$notes','$pay_date',$fa_id)");
+
 
     // ── After recording, redistribute ALL payments (linked+general) across all fee assignments ──
     $total_paid_global = floatval(mysqli_fetch_assoc(mysqli_query($conn,
@@ -279,7 +294,7 @@ $receipt_flash = $_GET['receipt'] ?? '';
 body { background: var(--surface); color: var(--text-main); }
 
 /* Sidebar */
-.sidebar { background: var(--navy); width: 260px; min-height: 100vh; height: 100vh; overflow-y: auto; position: fixed; left:0; top:0; z-index:40; display:flex; flex-direction:column; }
+.sidebar { background: var(--navy); width: 260px; min-height: 100vh; position: fixed; left:0; top:0; z-index:40; display:flex; flex-direction:column; }
 .sidebar-logo { padding: 28px 24px 20px; border-bottom: 1px solid rgba(255,255,255,0.07); }
 .sidebar-logo .brand { font-size: 20px; font-weight: 800; color: #fff; letter-spacing: -0.5px; }
 .sidebar-logo .brand span { color: var(--emerald); }
@@ -480,6 +495,15 @@ body { background: var(--surface); color: var(--text-main); }
         <a href="?tab=payments" class="nav-item <?= $active_tab==='payments'?'active':'' ?>">
             <span class="icon"><i class="fa-solid fa-receipt"></i></span> Payments
         </a>
+        <a href="?tab=refunds" class="nav-item <?= $active_tab==='refunds'?'active':'' ?>">
+            <span class="icon"><i class="fa-solid fa-money-bill-transfer"></i></span> Refund Requests
+            <?php
+            $pending_refund_count = intval(mysqli_fetch_assoc(mysqli_query($conn,
+                "SELECT COUNT(*) c FROM refund_requests WHERE status='pending'"))['c'] ?? 0);
+            if ($pending_refund_count > 0): ?>
+            <span style="margin-left:auto;background:#f59e0b;color:#fff;font-size:9px;font-weight:700;padding:1px 7px;border-radius:10px;"><?= $pending_refund_count ?></span>
+            <?php endif; ?>
+        </a>
 
         <div class="nav-section">Tools</div>
         <a href="?tab=reports" class="nav-item <?= $active_tab==='reports'?'active':'' ?>">
@@ -503,9 +527,6 @@ body { background: var(--surface); color: var(--text-main); }
                 <div style="font-size:10px;color:rgba(255,255,255,0.4);">Financial Accountant</div>
             </div>
         </div>
-        <a href="apply_leave.php" class="nav-item" style="margin-top:4px;color:#f59e0b;">
-            <span class="icon"><i class="fa-solid fa-calendar-minus"></i></span> Apply for Leave
-        </a>
         <a href="logout.php" class="nav-item" style="margin-top:4px;">
             <span class="icon"><i class="fa-solid fa-arrow-right-from-bracket"></i></span> Sign Out
         </a>
@@ -785,7 +806,6 @@ body { background: var(--surface); color: var(--text-main); }
                                 <button onclick="openAssignModal(<?= $s['id'] ?>, '<?= addslashes($s['full_name']) ?>')" class="btn btn-ghost btn-sm"><i class="fa-solid fa-file-invoice"></i> Assign</button>
                                 <button onclick="openReminderModal(<?= $s['id'] ?>, '<?= addslashes($s['full_name']) ?>')" class="btn btn-ghost btn-sm" style="color:var(--gold);"><i class="fa-solid fa-bell"></i></button>
                                 <button onclick="viewStudentLedger(<?= $s['id'] ?>)" class="btn btn-ghost btn-sm"><i class="fa-solid fa-eye"></i></button>
-                                <a href="fee_statement.php?student_id=<?= $s['id'] ?>" target="_blank" class="btn btn-ghost btn-sm" style="color:#c9a84c;border-color:rgba(201,168,76,.3);text-decoration:none;" title="Download Fee Statement"><i class="fa-solid fa-file-arrow-down"></i> Statement</a>
                             </div>
                         </td>
                     </tr>
@@ -932,6 +952,88 @@ body { background: var(--surface); color: var(--text-main); }
                     </tbody>
                 </table>
             </div>
+        </div>
+    </div>
+
+    <!-- ═══ REFUNDS TAB ═══════════════════════════════════════════ -->
+    <div class="tab-panel <?= $active_tab==='refunds'?'active':'' ?>" id="tab-refunds">
+        <div class="topbar">
+            <div>
+                <div class="page-title">Refund Requests</div>
+                <div class="page-sub">Review and process student refund applications</div>
+            </div>
+        </div>
+        <div style="padding:24px;">
+            <?php
+            $refund_reqs = mysqli_query($conn, "
+                SELECT rr.*, u.full_name, u.admission_number, u.email
+                FROM refund_requests rr
+                JOIN users u ON u.id = rr.student_id
+                ORDER BY FIELD(rr.status,'pending','approved','rejected','paid'), rr.created_at DESC
+            ");
+            ?>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Student</th>
+                        <th>Amount</th>
+                        <th>Reason</th>
+                        <th>Payout Details</th>
+                        <th>Status</th>
+                        <th>Requested</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                <?php if (mysqli_num_rows($refund_reqs) === 0): ?>
+                    <tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-muted);">No refund requests yet</td></tr>
+                <?php else: while ($rf = mysqli_fetch_assoc($refund_reqs)):
+                    $rf_colors = ['pending'=>'#d97706','approved'=>'#059669','rejected'=>'#dc2626','paid'=>'#2563eb'];
+                    $rf_bg     = ['pending'=>'#fef3c7','approved'=>'#d1fae5','rejected'=>'#fee2e2','paid'=>'#dbeafe'];
+                ?>
+                    <tr>
+                        <td>
+                            <div style="font-weight:700;font-size:12px;"><?= htmlspecialchars($rf['full_name']) ?></div>
+                            <div style="font-size:11px;color:var(--text-muted);"><?= htmlspecialchars($rf['admission_number'] ?? '—') ?></div>
+                        </td>
+                        <td style="font-weight:700;font-size:13px;">KES <?= number_format($rf['amount'], 2) ?></td>
+                        <td style="font-size:12px;max-width:220px;"><?= htmlspecialchars($rf['reason']) ?></td>
+                        <td style="font-size:11px;color:var(--text-muted);"><?= htmlspecialchars($rf['bank_details'] ?: '—') ?></td>
+                        <td>
+                            <span style="background:<?= $rf_bg[$rf['status']] ?? '#f1f5f9' ?>;color:<?= $rf_colors[$rf['status']] ?? '#64748b' ?>;font-size:10px;font-weight:800;padding:3px 10px;border-radius:20px;text-transform:uppercase;"><?= htmlspecialchars($rf['status']) ?></span>
+                        </td>
+                        <td style="font-size:12px;"><?= date('d M Y', strtotime($rf['created_at'])) ?></td>
+                        <td>
+                            <?php if ($rf['status'] === 'pending'): ?>
+                            <div style="display:flex;gap:6px;">
+                                <form method="POST">
+                                    <input type="hidden" name="action" value="review_refund">
+                                    <input type="hidden" name="refund_id" value="<?= $rf['id'] ?>">
+                                    <input type="hidden" name="new_status" value="approved">
+                                    <button type="submit" class="btn btn-sm" style="background:#059669;color:#fff;">Approve</button>
+                                </form>
+                                <form method="POST">
+                                    <input type="hidden" name="action" value="review_refund">
+                                    <input type="hidden" name="refund_id" value="<?= $rf['id'] ?>">
+                                    <input type="hidden" name="new_status" value="rejected">
+                                    <button type="submit" class="btn btn-sm" style="background:#fee2e2;color:#dc2626;">Reject</button>
+                                </form>
+                            </div>
+                            <?php elseif ($rf['status'] === 'approved'): ?>
+                            <form method="POST">
+                                <input type="hidden" name="action" value="review_refund">
+                                <input type="hidden" name="refund_id" value="<?= $rf['id'] ?>">
+                                <input type="hidden" name="new_status" value="paid">
+                                <button type="submit" class="btn btn-sm" style="background:#2563eb;color:#fff;">Mark Paid</button>
+                            </form>
+                            <?php else: ?>
+                            <span style="color:var(--text-muted);font-size:11px;">—</span>
+                            <?php endif; ?>
+                        </td>
+                    </tr>
+                <?php endwhile; endif; ?>
+                </tbody>
+            </table>
         </div>
     </div>
 

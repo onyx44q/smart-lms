@@ -119,7 +119,8 @@ function getLecturerData($conn, $user_id) {
     $courses_res = mysqli_query($conn,
         "SELECT DISTINCT id, title FROM courses
          WHERE lecturer_id = $user_id
-            OR id = (SELECT course_id FROM users WHERE id = $user_id AND course_id IS NOT NULL LIMIT 1)"
+            OR id = (SELECT course_id FROM users WHERE id = $user_id AND course_id IS NOT NULL LIMIT 1)
+            OR id IN (SELECT course_id FROM course_units WHERE lecturer_id = $user_id)"
     );
     $courses = [];
     $cids    = [];
@@ -169,7 +170,73 @@ function getLecturerData($conn, $user_id) {
     ));
     $totalMaterials = intval($mats['t']);
 
-    return compact('courses','totalStudents','avgMastery','atRisk','weakSkill','quizCount','totalMaterials');
+    // ── Units this lecturer teaches (directly, or via whole-course assignment) ──
+    $units_res = mysqli_query($conn,
+        "SELECT cu.id, cu.title, cu.unit_code, c.title AS course_title
+         FROM course_units cu
+         JOIN courses c ON c.id = cu.course_id
+         WHERE cu.lecturer_id = $user_id OR c.lecturer_id = $user_id
+         ORDER BY c.title, cu.title"
+    );
+    $units = [];
+    $uids  = [];
+    while ($u = mysqli_fetch_assoc($units_res)) { $units[] = $u['title'] . ' (' . $u['course_title'] . ')'; $uids[] = $u['id']; }
+    $totalUnits = count($units);
+
+    // ── Marks entered / pending across all units ──
+    $marksEntered = 0;
+    $marksTotal   = 0;
+    if (!empty($uids)) {
+        $uidsStr = implode(',', $uids);
+        $mtot = mysqli_fetch_assoc(mysqli_query($conn,
+            "SELECT COUNT(*) as t FROM unit_assessments WHERE unit_id IN ($uidsStr)"
+        ));
+        $marksTotal = intval($mtot['t'] ?? 0);
+        $ment = mysqli_fetch_assoc(mysqli_query($conn,
+            "SELECT COUNT(*) as t FROM unit_marks um
+             JOIN unit_assessments ua ON ua.id = um.assessment_id
+             WHERE ua.unit_id IN ($uidsStr) AND um.mark IS NOT NULL"
+        ));
+        $marksEntered = intval($ment['t'] ?? 0);
+    }
+
+    // ── Attendance sessions created by this lecturer ──
+    $attSessions = mysqli_fetch_assoc(mysqli_query($conn,
+        "SELECT COUNT(*) as t FROM attendance_sessions WHERE lecturer_id = $user_id"
+    ));
+    $totalAttSessions = intval($attSessions['t'] ?? 0);
+
+    // ── Students currently barred from exams (>33.33% absence) in this lecturer's units ──
+    $barredCount = 0;
+    if (!empty($uids)) {
+        $uidsStr = implode(',', $uids);
+        $barred_res = mysqli_query($conn,
+            "SELECT ar.student_id, ats.unit_id,
+                    COUNT(*) AS total_sessions,
+                    SUM(CASE WHEN ar.status='absent' THEN 1 ELSE 0 END) AS absences
+             FROM attendance_records ar
+             JOIN attendance_sessions ats ON ats.id = ar.session_id
+             WHERE ats.unit_id IN ($uidsStr)
+             GROUP BY ar.student_id, ats.unit_id
+             HAVING total_sessions > 0 AND (absences / total_sessions) > 0.3333"
+        );
+        if ($barred_res) $barredCount = mysqli_num_rows($barred_res);
+    }
+
+    // ── Pending leave requests for this lecturer ──
+    $myPendingLeave = 0;
+    $leave_check = mysqli_query($conn, "SHOW TABLES LIKE 'hr_leave_requests'");
+    if ($leave_check && mysqli_num_rows($leave_check) > 0) {
+        $lv = mysqli_fetch_assoc(mysqli_query($conn,
+            "SELECT COUNT(*) as t FROM hr_leave_requests hl
+             JOIN hr_staff hs ON hs.id = hl.staff_id
+             WHERE hs.user_id = $user_id AND hl.status = 'pending'"
+        ));
+        $myPendingLeave = intval($lv['t'] ?? 0);
+    }
+
+    return compact('courses','totalStudents','avgMastery','atRisk','weakSkill','quizCount','totalMaterials',
+                    'units','totalUnits','marksEntered','marksTotal','totalAttSessions','barredCount','myPendingLeave');
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -374,6 +441,41 @@ elseif ($role === 'lecturer') {
         $reply = "Hello {$name}! You have {$d['totalStudents']} students enrolled across " . count($d['courses']) . " course(s). Class average mastery is {$d['avgMastery']}%. How can I assist you?";
     }
 
+    // ── Marks Manager ──
+    elseif (contains($msg, ['marks','mark manager','enter marks','cat','coursework','exam mark','grading','grade entry'])) {
+        $reply = "Marks Manager lets you enter CAT, coursework, and exam marks for any unit you teach — go to 'Marks Manager' in the sidebar, pick a unit from the tabs at the top (grouped by course), define assessment components if not already set, then type each student's score and click 'Save All Marks'.";
+        $reply .= " You've entered {$d['marksEntered']} of {$d['marksTotal']} assessment mark(s) so far across {$d['totalUnits']} unit(s).";
+        if (!empty($d['units'])) {
+            $reply .= "\n\nUnits you can manage marks for: " . implode(', ', $d['units']) . ".";
+        }
+    }
+
+    // ── Attendance Manager / exam bar ──
+    elseif (contains($msg, ['attendance','absent','present','exam bar','barred','33.33','session'])) {
+        $reply = "Attendance Manager lets you create a session (title + date) for any unit you teach, then mark each student Present or Absent. Students whose absences exceed 33.33% of total sessions in a unit are automatically flagged as exam-barred for that unit.";
+        $reply .= " You've created {$d['totalAttSessions']} session(s) so far.";
+        if ($d['barredCount'] > 0) {
+            $reply .= " Currently {$d['barredCount']} student-unit record(s) are over the 33.33% absence threshold and exam-barred — check the Attendance tab for details.";
+        } else {
+            $reply .= " No students are currently exam-barred in your units.";
+        }
+    }
+
+    // ── Apply for Leave ──
+    elseif (contains($msg, ['leave','vacation','time off','sick day','apply for leave'])) {
+        $reply = "You can apply for leave from the 'Apply for Leave' link in your sidebar — choose a leave type, dates, and reason, then submit. HR will review and approve or reject it.";
+        $reply .= $d['myPendingLeave'] > 0
+            ? " You currently have {$d['myPendingLeave']} pending leave request(s) awaiting review."
+            : " You have no pending leave requests right now.";
+    }
+
+    // ── Units taught ──
+    elseif (contains($msg, ['my unit','which unit','unit list','units i teach'])) {
+        $reply = !empty($d['units'])
+            ? "You teach {$d['totalUnits']} unit(s): " . implode(', ', $d['units']) . ". You can manage marks and attendance for every one of them, regardless of how many courses they belong to."
+            : "No units are currently assigned to you at unit level — but you may still be assigned a whole course. Try asking 'my courses'.";
+    }
+
     // ── Students at risk ──
     elseif (contains($msg, ['at risk','struggling','failing','weak student','low score','poor'])) {
         if ($d['atRisk'] > 0) {
@@ -408,7 +510,7 @@ elseif ($role === 'lecturer') {
     // ── Courses ──
     elseif (contains($msg, ['my course','which course','course list'])) {
         if (!empty($d['courses'])) {
-            $reply = "You are teaching: " . implode(', ', $d['courses']) . ". With {$d['totalStudents']} total enrolled students.";
+            $reply = "You are teaching: " . implode(', ', $d['courses']) . ". With {$d['totalStudents']} total enrolled students across {$d['totalUnits']} unit(s).";
         } else {
             $reply = "No courses are currently assigned to you. Contact the admin to be assigned a course.";
         }
@@ -421,7 +523,10 @@ elseif ($role === 'lecturer') {
                . "• My Courses — View and manage course materials\n"
                . "• Quiz Manager — Generate and publish AI quizzes\n"
                . "• My Schedule — Create and manage class sessions\n"
-               . "• Upload Handouts — Add PDFs and videos to your courses\n";
+               . "• Upload Handouts — Add PDFs and videos to your courses\n"
+               . "• Marks Manager — Enter CAT, coursework and exam marks per unit\n"
+               . "• Attendance — Create sessions, mark present/absent, track the 33.33% exam-bar rule\n"
+               . "• Apply for Leave — Submit and track your leave requests\n";
     }
 
     // ── Default ──
@@ -432,7 +537,11 @@ elseif ($role === 'lecturer') {
                . "• 'quiz' — how to generate quizzes\n"
                . "• 'upload' — managing course materials\n"
                . "• 'schedule' — creating class sessions\n"
-               . "• 'my courses' — see your assigned courses";
+               . "• 'my courses' — see your assigned courses\n"
+               . "• 'marks' — entering CAT/coursework/exam marks\n"
+               . "• 'attendance' — sessions, absences and the 33.33% exam bar\n"
+               . "• 'leave' — applying for leave and checking status\n"
+               . "• 'my units' — see every unit you teach, across any course";
     }
 }
 

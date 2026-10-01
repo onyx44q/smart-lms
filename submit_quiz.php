@@ -123,6 +123,7 @@ mysqli_query($conn,
        ($student_id, $quiz_id, $raw_score, '$recommendation',
         '$action_str', '$band_str', '$grade_str', '$diff_str', $attempt_no, NOW())"
 );
+$result_id = mysqli_insert_id($conn);
 
 // ── 3. Log notification for the student ───────────────────────────
 $notif_msg = mysqli_real_escape_string($conn, $decision['notification_msg']);
@@ -150,8 +151,9 @@ $action_label = match ($decision['action']) {
 
 $grade   = urlencode($decision['predicted_grade']);
 $mastery = urlencode($decision['new_mastery']);
+$rid     = urlencode($result_id);
 
 header("Location: student_dashboard.php?status=" . $decision['action']
-     . "&msg=$action_label&grade=$grade&mastery=$mastery");
+     . "&msg=$action_label&grade=$grade&mastery=$mastery&rid=$rid");
 exit();
 ?>
