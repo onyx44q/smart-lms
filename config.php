@@ -37,6 +37,18 @@ if (!$semester_col_checked) {
     }
 }
 
+// ── One-time schema patch: users.must_change_password ───────────────────
+// Set to 1 for accounts an administrator creates with a temporary
+// password; the user is sent to change it at first login.
+$mcp_check = mysqli_query($conn, "SHOW COLUMNS FROM users LIKE 'must_change_password'");
+if ($mcp_check && mysqli_num_rows($mcp_check) === 0) {
+    mysqli_query($conn, "ALTER TABLE users ADD COLUMN must_change_password TINYINT(1) NOT NULL DEFAULT 0");
+}
+
+// ── Mastery model upgrade: rebuild stored mastery from real quiz scores (runs once) ──
+include_once __DIR__ . '/mastery_engine.php';
+me_migrate_if_needed($conn);
+
 // 3. Role Security Function — strict, single-role match only
 function checkRole($role) {
     if (!isset($_SESSION['role']) || $_SESSION['role'] !== $role) {
@@ -45,11 +57,22 @@ function checkRole($role) {
         header("Location: index.php?error=unauthorized");
         exit();
     }
+
+    // Lecturers whose account was created by an administrator must replace the
+    // temporary password before using ANY lecturer page (enforced here so no page can be skipped).
+    if ($role === 'lecturer' && basename($_SERVER['SCRIPT_NAME'] ?? '') !== 'lecturer_profile.php') {
+        global $conn;
+        $r = mysqli_query($conn, "SELECT must_change_password FROM users WHERE id = " . intval($_SESSION['user_id'] ?? 0) . " LIMIT 1");
+        if ($r && ($row = mysqli_fetch_assoc($r)) && !empty($row['must_change_password'])) {
+            header("Location: lecturer_profile.php?force=1");
+            exit();
+        }
+    }
 }
 
 // 4. AI CONFIG
 define('AI_PROVIDER', 'groq');
-define('GROQ_API_KEY', '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');
+define('GROQ_API_KEY', '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');
 
 // ── Minimum overall percentage (across ALL assessment components of a
 //    unit) a student must reach to be considered to have PASSED that unit

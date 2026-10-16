@@ -1,6 +1,7 @@
 <?php
 session_start();
 include 'config.php';
+include_once 'login_settings.php';
 
 if ($_SERVER["REQUEST_METHOD"] !== "POST") {
     header("Location: index.php"); exit();
@@ -9,6 +10,10 @@ if ($_SERVER["REQUEST_METHOD"] !== "POST") {
 $identifier = mysqli_real_escape_string($conn, trim($_POST['email'] ?? ''));
 $password   = trim($_POST['password'] ?? '');
 $role       = mysqli_real_escape_string($conn, trim($_POST['role'] ?? ''));
+// SECURITY: the role is NOT taken from the browser unless the legacy selector
+// is switched on. Normally it is read from the matched account in the database.
+if (!LOGIN_SHOW_ROLE_SELECTOR) $role = '';
+$roleSql    = ($role !== '') ? "AND role='$role'" : '';
 
 // Extend role ENUM silently in case it hasn't been done yet
 @mysqli_query($conn, "ALTER TABLE users MODIFY COLUMN `role`
@@ -24,8 +29,8 @@ $user = null;
 
 // Try email match
 $res = mysqli_query($conn,
-    "SELECT id, full_name, role, password FROM users
-     WHERE email='$identifier' AND role='$role' LIMIT 1");
+    "SELECT id, full_name, role, password, must_change_password FROM users
+     WHERE email='$identifier' $roleSql LIMIT 1");
 if ($res && mysqli_num_rows($res) === 1) {
     $user = mysqli_fetch_assoc($res);
 }
@@ -33,8 +38,8 @@ if ($res && mysqli_num_rows($res) === 1) {
 // If not found by email, try admission_number (students only)
 if (!$user) {
     $res2 = mysqli_query($conn,
-        "SELECT id, full_name, role, password FROM users
-         WHERE admission_number='$identifier' AND role='$role' LIMIT 1");
+        "SELECT id, full_name, role, password, must_change_password FROM users
+         WHERE admission_number='$identifier' $roleSql LIMIT 1");
     if ($res2 && mysqli_num_rows($res2) === 1) {
         $user = mysqli_fetch_assoc($res2);
     }
@@ -105,7 +110,7 @@ if ($user && password_verify($password, $user['password'])) {
 
     switch ($user['role']) {
         case 'admin':                header("Location: admin_dashboard.php");     break;
-        case 'lecturer':             header("Location: lecturer_dashboard.php");  break;
+        case 'lecturer':             header("Location: " . (!empty($user['must_change_password']) ? "lecturer_profile.php?force=1" : "lecturer_dashboard.php")); break;
         case 'financial_accountant': header("Location: financial_dashboard.php"); break;
         case 'boarding_master':      header("Location: boarding_dashboard.php");  break;
         case 'hr_manager':           header("Location: hr_dashboard.php");        break;

@@ -1,22 +1,25 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
 include 'config.php';
+include_once 'login_settings.php';
 
 $msg = ''; $msg_type = ''; $reset_link = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $identifier = mysqli_real_escape_string($conn, trim($_POST['identifier'] ?? ''));
     $role       = mysqli_real_escape_string($conn, trim($_POST['role'] ?? ''));
+    if (!LOGIN_SHOW_ROLE_SELECTOR) $role = '';   // role comes from the account, not the browser
+    $roleSql    = ($role !== '') ? "AND role='$role'" : '';
 
-    if ($identifier === '' || $role === '') {
+    if ($identifier === '' || (LOGIN_SHOW_ROLE_SELECTOR && $role === '')) {
         $msg = "Please fill in all fields."; $msg_type = 'error';
     } else {
         // Match by email OR admission number, same pattern as login
         $user = null;
-        $res = mysqli_query($conn, "SELECT id, full_name, email FROM users WHERE email='$identifier' AND role='$role' LIMIT 1");
+        $res = mysqli_query($conn, "SELECT id, full_name, email FROM users WHERE email='$identifier' $roleSql LIMIT 1");
         if ($res && mysqli_num_rows($res) === 1) $user = mysqli_fetch_assoc($res);
         if (!$user) {
-            $res2 = mysqli_query($conn, "SELECT id, full_name, email FROM users WHERE admission_number='$identifier' AND role='$role' LIMIT 1");
+            $res2 = mysqli_query($conn, "SELECT id, full_name, email FROM users WHERE admission_number='$identifier' $roleSql LIMIT 1");
             if ($res2 && mysqli_num_rows($res2) === 1) $user = mysqli_fetch_assoc($res2);
         }
 
@@ -89,6 +92,7 @@ body { background: linear-gradient(135deg,#0f172a,#1e1b4b); min-height: 100vh; }
 
     <?php if (!$reset_link): ?>
     <form method="POST" class="space-y-4">
+        <?php if (LOGIN_SHOW_ROLE_SELECTOR): ?>
         <div>
             <label class="text-[10px] font-black uppercase text-slate-500 tracking-widest mb-1 block">Role</label>
             <select name="role" required class="w-full p-3 bg-slate-100 rounded-xl outline-none text-sm font-bold text-slate-700 appearance-none focus:ring-2 focus:ring-amber-500">
@@ -100,6 +104,7 @@ body { background: linear-gradient(135deg,#0f172a,#1e1b4b); min-height: 100vh; }
                 <option value="hr_manager">HR Manager</option>
             </select>
         </div>
+        <?php endif; ?>
         <div>
             <label class="text-[10px] font-black uppercase text-slate-500 tracking-widest mb-1 block">Email or Admission No.</label>
             <input type="text" name="identifier" required placeholder="Email or Admission Number"

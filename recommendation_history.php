@@ -74,6 +74,10 @@ $backLink = $role === 'student' ? 'student_dashboard.php' : ($role === 'lecturer
   .helpful-no { color: #dc2626; font-weight: 800; font-size: 10px; }
   .helpful-none { color: #cbd5e1; font-weight: 700; font-size: 10px; }
   .empty { text-align: center; padding: 40px; color: #94a3b8; }
+  .rate-btn { border: 1px solid #e2e8f0; background: white; border-radius: 8px; padding: 4px 10px; font-size: 10px; font-weight: 800; text-transform: uppercase; cursor: pointer; margin-right: 4px; font-family: inherit; }
+  .rate-btn.yes:hover, .rate-btn.yes.on { background: #d1fae5; border-color: #34d399; color: #047857; }
+  .rate-btn.no:hover,  .rate-btn.no.on  { background: #fee2e2; border-color: #f87171; color: #b91c1c; }
+  .rate-note { font-size: 9px; color: #94a3b8; margin-top: 4px; }
 </style>
 </head>
 <body>
@@ -113,8 +117,11 @@ $backLink = $role === 'student' ? 'student_dashboard.php' : ($role === 'lecturer
           <div style="margin-top:6px;"><?php echo htmlspecialchars($r['recommendation']); ?></div>
         </td>
         <td><?php echo htmlspecialchars($reason); ?></td>
-        <td>
-          <?php if ($r['helpful'] === 'yes'): ?>
+        <td id="rate-cell-<?php echo (int)$r['id']; ?>">
+          <?php if ($role === 'student'): ?>
+            <button type="button" class="rate-btn yes <?php echo $r['helpful']==='yes' ? 'on' : ''; ?>" onclick="rateRec(<?php echo (int)$r['id']; ?>,'yes')"><i class="fa-solid fa-thumbs-up"></i> Yes</button><button type="button" class="rate-btn no <?php echo $r['helpful']==='no' ? 'on' : ''; ?>" onclick="rateRec(<?php echo (int)$r['id']; ?>,'no')"><i class="fa-solid fa-thumbs-down"></i> No</button>
+            <div class="rate-note" id="rate-note-<?php echo (int)$r['id']; ?>"><?php echo $r['helpful'] ? 'Your vote is saved — click to change it.' : 'Was this recommendation helpful?'; ?></div>
+          <?php elseif ($r['helpful'] === 'yes'): ?>
             <span class="helpful-yes"><i class="fa-solid fa-thumbs-up"></i> Yes</span>
           <?php elseif ($r['helpful'] === 'no'): ?>
             <span class="helpful-no"><i class="fa-solid fa-thumbs-down"></i> No</span>
@@ -128,5 +135,22 @@ $backLink = $role === 'student' ? 'student_dashboard.php' : ($role === 'lecturer
   </table>
   <?php endif; ?>
 </div>
+<script>
+function rateRec(id, vote) {
+  fetch('record_feedback.php', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: 'result_id=' + encodeURIComponent(id) + '&helpful=' + encodeURIComponent(vote)
+  }).then(r => r.json()).then(d => {
+    const cell = document.getElementById('rate-cell-' + id);
+    const note = document.getElementById('rate-note-' + id);
+    if (d.ok) {
+      cell.querySelectorAll('.rate-btn').forEach(b => b.classList.remove('on'));
+      cell.querySelector('.rate-btn.' + vote).classList.add('on');
+      note.textContent = 'Thanks — your vote is saved.';
+    } else { note.textContent = 'Could not save: ' + (d.error || 'try again'); }
+  }).catch(() => { document.getElementById('rate-note-' + id).textContent = 'Network error — try again.'; });
+}
+</script>
 </body>
 </html>

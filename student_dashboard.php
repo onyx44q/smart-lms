@@ -272,55 +272,21 @@ if (mastery_needs_recalculation($user_id, $conn)) {
     recalculate_mastery_for_student($user_id, $conn);
 }
 
-// ── Mastery data — computed using AI engine incremental rules, scoped to course ──
-// We replay quiz RESULTS through the same +8.5 / +3.2 / -5.0 delta rules used
-// in ai_engine.php so progress bars reflect accumulated mastery, NOT raw score
-// averages (which incorrectly hit 100% after a single perfect quiz).
-include_once __DIR__ . '/recalculate_mastery.php'; // provides infer_skill_name()
+// ── Mastery data — from the student's REAL quiz scores (mastery_engine.php) ──
+// Each skill = average of the student's latest score on every quiz in that skill;
+// the overall figure = average of the skills they have been assessed on. Skills with
+// no quiz yet are simply not listed ("not assessed"), never shown as 0%.
+// The old version replayed +8.5/+3.2/-5 bonuses, so a perfect quiz showed as 8.5%.
+include_once __DIR__ . '/mastery_engine.php';
+$masteryResult = me_compute_student($conn, $user_id, $view_course_id ?: null);
 
-$masteryData  = [];
-$skillMastery = [];   // [skill_name => accumulated_level]
-
-if ($view_course_id) {
-    // Fetch all results for this student in this course, oldest first
-    $rfm_res = mysqli_query($conn,
-        "SELECT r.score, r.attempt_no, q.id AS quiz_id, q.skill_name, q.title
-         FROM results r
-         JOIN quizzes q ON q.id = r.quiz_id
-         WHERE r.student_id = $user_id AND q.course_id = $view_course_id
-         ORDER BY r.created_at ASC, r.id ASC"
-    );
-    while ($row = mysqli_fetch_assoc($rfm_res)) {
-        // Map to skill — use DB value first, then keyword inference, then modulo rotation
-        $skill   = !empty($row['skill_name'])
-                   ? $row['skill_name']
-                   : infer_skill_name(['id' => $row['quiz_id'], 'skill_name' => '', 'title' => $row['title']]);
-        $current = $skillMastery[$skill] ?? 0.0;
-        $score   = floatval($row['score']);
-        $att     = max(1, intval($row['attempt_no'] ?? 1));
-
-        // AI engine thresholds (keep in sync with Ai_engine.php constants)
-        if ($score >= 80)                $delta = 8.5;
-        elseif ($score >= 50 && $att < 3) $delta = 3.2;
-        else                              $delta = -5.0;
-
-        $skillMastery[$skill] = max(0.0, min(100.0, $current + $delta));
-    }
-    foreach ($skillMastery as $skill => $level) {
-        $masteryData[] = ['skill_name' => $skill, 'mastery_level' => round($level, 1)];
-    }
-} else {
-    // Global fallback: take highest accumulated value per skill across all courses
-    $mastery_query = mysqli_query($conn,
-        "SELECT skill_name, MAX(mastery_level) AS mastery_level
-         FROM student_mastery WHERE student_id = '$user_id' GROUP BY skill_name"
-    );
-    while ($m = mysqli_fetch_assoc($mastery_query)) $masteryData[] = $m;
+$masteryData = [];
+foreach ($masteryResult['skills'] as $skill => $sm) {
+    $masteryData[] = ['skill_name' => $skill, 'mastery_level' => $sm['mastery'], 'quizzes' => $sm['quizzes'], 'confidence' => $sm['confidence']];
 }
-
-$avgMastery = count($masteryData) > 0
-    ? round(array_sum(array_column($masteryData, 'mastery_level')) / count($masteryData), 1)
-    : 0;
+$avgMastery        = $masteryResult['avg'] ?? 0;
+$masteryHasData    = $masteryResult['avg'] !== null;
+$masteryQuizCount  = $masteryResult['quizzes'];
 
 // ── Materials count — scoped to the selected course ──────────────────
 $totalMaterials = 0;
@@ -902,7 +868,8 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
                     </div>
                     <div>
                         <p class="text-[10px] font-black text-slate-400 uppercase">Avg. Mastery <?php echo $view_course_id ? '· ' . htmlspecialchars($view_course_name) : ''; ?></p>
-                        <h3 class="text-2xl font-black text-slate-900"><?php echo $avgMastery; ?><span class="text-sm text-slate-400">%</span></h3>
+                        <h3 class="text-2xl font-black text-slate-900"><?php if ($masteryHasData): echo $avgMastery; ?><span class="text-sm text-slate-400">%</span><?php else: ?><span class="text-slate-300">&mdash;</span><?php endif; ?></h3>
+                        <p class="text-[9px] font-bold text-slate-400 uppercase mt-0.5"><?php echo $masteryHasData ? 'from ' . $masteryQuizCount . ' quiz' . ($masteryQuizCount === 1 ? '' : 'zes') . ($masteryQuizCount < 2 ? ' · early' : '') : 'no quizzes yet'; ?></p>
                     </div>
                 </div>
 
@@ -1040,7 +1007,7 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
                     <div>
                         <div class="flex justify-between mb-1.5">
                             <span class="text-[10px] font-bold uppercase text-slate-600"><?php echo htmlspecialchars($skill['skill_name']); ?></span>
-                            <span class="text-[10px] font-black <?php echo $labelColor; ?>"><?php echo $level; ?>%</span>
+                            <span class="text-[10px] font-black <?php echo $labelColor; ?>"><?php echo $level; ?>%<span class="text-slate-400 font-bold normal-case"> &middot; <?php echo intval($skill['quizzes']); ?> quiz<?php echo intval($skill['quizzes']) === 1 ? '' : 'zes'; ?><?php echo ($skill['confidence'] ?? '') === 'low' ? ' (early)' : ''; ?></span></span>
                         </div>
                         <div class="h-2 bg-slate-100 rounded-full overflow-hidden">
                             <div class="mastery-fill"
@@ -1098,7 +1065,7 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
                             <div class="score-ring" id="score-ring" style="--pct: 0%">
                                 <span id="score-val">—</span>
                             </div>
-                            <p class="text-[9px] text-slate-500 uppercase mt-1 tracking-widest">Motivation</p>
+                            <p class="text-[9px] text-slate-500 uppercase mt-1 tracking-widest">Momentum</p>
                         </div>
                     </div>
 
@@ -1123,6 +1090,7 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
                     <div class="bg-white/5 rounded-2xl p-4 mb-4" id="ai-mastery-bars-section">
                         <p class="text-[9px] font-black uppercase text-rose-300 tracking-widest mb-3"><i class="fa-solid fa-chart-simple mr-1"></i>Live Skill Mastery</p>
                         <div id="ai-mastery-bars" class="space-y-3">
+                            <?php if (empty($masteryData)): ?><p class="text-[11px] text-slate-400">Not assessed yet &mdash; take a quiz and your skill levels will appear here.</p><?php endif; ?>
                             <?php foreach ($masteryData as $skill):
                                 $lvl     = floatval($skill['mastery_level']);
                                 $display = max(2, min(100, $lvl));
@@ -1132,7 +1100,7 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
                             <div>
                                 <div class="flex justify-between mb-1">
                                     <span class="text-[10px] text-slate-400"><?php echo htmlspecialchars($skill['skill_name']); ?></span>
-                                    <span class="text-[10px] font-black <?php echo $col; ?>"><?php echo $lvl; ?>%</span>
+                                    <span class="text-[10px] font-black <?php echo $col; ?>"><?php echo $lvl; ?>%<span class="text-slate-500 font-bold"> &middot; <?php echo intval($skill['quizzes']); ?> quiz<?php echo intval($skill['quizzes']) === 1 ? '' : 'zes'; ?></span></span>
                                 </div>
                                 <div class="h-1.5 bg-white/10 rounded-full overflow-hidden">
                                     <div class="h-full rounded-full ai-panel-mastery-fill"
@@ -3561,21 +3529,18 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
                 document.getElementById('score-val').textContent = score;
                 document.getElementById('score-ring').style.setProperty('--pct', score + '%');
 
-                // Strengths list
-                const strengthsEl = document.getElementById('ai-strengths');
-                strengthsEl.innerHTML = '';
-                (d.strengths || []).forEach(s => {
-                    strengthsEl.innerHTML += `<li class="flex items-start space-x-2 text-xs text-slate-300">
-                        <i class="fa-solid fa-check text-emerald-400 mt-0.5 text-[9px]"></i><span>${s}</span></li>`;
-                });
-
-                // Focus areas list
-                const focusEl = document.getElementById('ai-focus');
-                focusEl.innerHTML = '';
-                (d.focus_areas || []).forEach(f => {
-                    focusEl.innerHTML += `<li class="flex items-start space-x-2 text-xs text-slate-300">
-                        <i class="fa-solid fa-arrow-right text-amber-400 mt-0.5 text-[9px]"></i><span>${f}</span></li>`;
-                });
+                // Strengths / focus lists — built with textContent so server text can never inject HTML
+                const fillList = (id, items, icon, color) => {
+                    const ul = document.getElementById(id); ul.innerHTML = '';
+                    (items || []).forEach(txt => {
+                        const li = document.createElement('li'); li.className = 'flex items-start space-x-2 text-xs text-slate-300';
+                        const i = document.createElement('i'); i.className = 'fa-solid ' + icon + ' ' + color + ' mt-0.5 text-[9px]';
+                        const sp = document.createElement('span'); sp.textContent = txt;
+                        li.appendChild(i); li.appendChild(sp); ul.appendChild(li);
+                    });
+                };
+                fillList('ai-strengths', d.strengths, 'fa-check', 'text-emerald-400');
+                fillList('ai-focus', d.focus_areas, 'fa-arrow-right', 'text-amber-400');
 
                 // Show result
                 loadingEl.classList.add('hidden');
@@ -3594,6 +3559,31 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
         function toggleChatbot() {
             const chatWindow = document.getElementById('chatbot-window');
             chatWindow.style.display = (chatWindow.style.display === 'flex') ? 'none' : 'flex';
+            if (chatWindow.style.display === 'flex' && !window.__chatChipsShown) {
+                window.__chatChipsShown = true;
+                chatShowChips(['My summary','My fees','My attendance','My marks','Recommendations','Available quizzes']);
+            }
+        }
+
+        function chatEsc(t) {
+            return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+        }
+        function chatShowChips(chips) {
+            const box = document.getElementById('chatbot-messages');
+            document.querySelectorAll('.chat-followups').forEach(el => el.remove());
+            if (!chips.length) return;
+            const wrap = document.createElement('div');
+            wrap.className = 'chat-followups';
+            wrap.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 10px;';
+            chips.forEach(c => {
+                const b = document.createElement('button');
+                b.type = 'button'; b.textContent = c;
+                b.style.cssText = 'font-size:10px;padding:4px 10px;border-radius:20px;background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;font-weight:700;cursor:pointer;';
+                b.onclick = () => { document.getElementById('chatbot-input').value = c; sendChatbotMessage(); };
+                wrap.appendChild(b);
+            });
+            box.appendChild(wrap);
+            box.scrollTop = box.scrollHeight;
         }
 
         async function sendChatbotMessage() {
@@ -3604,7 +3594,8 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
             const chatMessages = document.getElementById('chatbot-messages');
 
             // Show user message
-            chatMessages.innerHTML += `<div class="message user">${message}</div>`;
+            chatMessages.insertAdjacentHTML('beforeend', `<div class="message user">${chatEsc(message)}</div>`);
+            document.querySelectorAll('.chat-followups').forEach(el => el.remove());
             input.value = '';
             chatMessages.scrollTop = chatMessages.scrollHeight;
 
@@ -3625,12 +3616,13 @@ $unread_reminders = count(array_filter($fee_reminders, fn($r) => !$r['is_read'])
                 const res  = await fetch('chatbot.php', { method: 'POST', body: form });
                 const data = await res.json();
                 document.getElementById('chat-typing-indicator')?.remove();
-                const reply = (data.reply || 'Sorry, I could not process that.')
-                    .replace(/\n/g, '<br>');
-                chatMessages.innerHTML += `<div class="message bot">${reply}</div>`;
+                // Escape first (replies include names/titles stored in the database), then keep line breaks.
+                const reply = chatEsc(data.reply || 'Sorry, I could not process that.').replace(/\n/g, '<br>');
+                chatMessages.insertAdjacentHTML('beforeend', `<div class="message bot">${reply}</div>`);
+                chatShowChips(data.chips || []);
             } catch (e) {
                 document.getElementById('chat-typing-indicator')?.remove();
-                chatMessages.innerHTML += `<div class="message bot">Connection error. Please try again.</div>`;
+                chatMessages.insertAdjacentHTML('beforeend', `<div class="message bot">Connection error. Please try again.</div>`);
             }
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }

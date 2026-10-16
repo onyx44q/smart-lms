@@ -92,24 +92,43 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     }
 
     if ($action === 'add_lecturer') {
-        $name = mysqli_real_escape_string($conn, $_POST['full_name']);
-        $email = mysqli_real_escape_string($conn, $_POST['email']);
-        $course_id = mysqli_real_escape_string($conn, $_POST['course_id']);
-        $pwd = password_hash($_POST['password'], PASSWORD_BCRYPT);
-        
-        // 1. Insert Lecturer into users table
-        $sql = "INSERT INTO users (full_name, email, password, role, course_id) 
-                VALUES ('$name', '$email', '$pwd', 'lecturer', '$course_id')";
-        
+        $name_raw  = trim($_POST['full_name'] ?? '');
+        $email_raw = trim($_POST['email'] ?? '');
+        $pwd_raw   = (string)($_POST['password'] ?? '');
+        $course_id = intval($_POST['course_id'] ?? 0);   // 0 = no initial course
+
+        if ($name_raw === '' || !filter_var($email_raw, FILTER_VALIDATE_EMAIL)) {
+            header("Location: admin_dashboard.php?view=users&status=lect_invalid"); exit;
+        }
+        if (strlen($pwd_raw) < 8) {
+            header("Location: admin_dashboard.php?view=users&status=lect_weakpwd"); exit;
+        }
+
+        $name  = mysqli_real_escape_string($conn, $name_raw);
+        $email = mysqli_real_escape_string($conn, $email_raw);
+
+        // Email must be unique (also enforced by the DB, but give a clear message).
+        $dup = mysqli_query($conn, "SELECT id FROM users WHERE email = '$email' LIMIT 1");
+        if ($dup && mysqli_num_rows($dup) > 0) {
+            header("Location: admin_dashboard.php?view=users&status=email_taken"); exit;
+        }
+
+        $pwd = password_hash($pwd_raw, PASSWORD_BCRYPT);
+        $course_sql = $course_id > 0 ? (string)$course_id : 'NULL';
+
+        // 1. Insert lecturer. must_change_password=1 forces them to replace the
+        //    temporary password the admin set the first time they log in.
+        $sql = "INSERT INTO users (full_name, email, password, role, course_id, must_change_password)
+                VALUES ('$name', '$email', '$pwd', 'lecturer', $course_sql, 1)";
+
         if (mysqli_query($conn, $sql)) {
-            // 2. Get the newly created Lecturer's ID
             $new_lecturer_id = mysqli_insert_id($conn);
 
-            // 3. Update the courses table to link this lecturer
-            if (!empty($course_id)) {
-                mysqli_query($conn, "UPDATE courses SET lecturer_id = '$new_lecturer_id' WHERE id = '$course_id'");
+            // 2. Link the lecturer to the chosen course (if any)
+            if ($course_id > 0) {
+                mysqli_query($conn, "UPDATE courses SET lecturer_id = $new_lecturer_id WHERE id = $course_id");
             }
-            header("Location: admin_dashboard.php?view=users&status=added");
+            header("Location: admin_dashboard.php?view=users&status=lect_added");
         } else {
             header("Location: admin_dashboard.php?view=users&status=error");
         }

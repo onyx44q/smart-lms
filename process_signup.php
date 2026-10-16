@@ -6,7 +6,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $email = mysqli_real_escape_string($conn, $_POST['email']);
     $password = $_POST['password'];
     $confirm_password = $_POST['confirm_password'];
-    $role = $_POST['role'];
+    // SECURITY: never trust the role sent by the browser. Public signup may only
+    // create the roles offered on the signup form; anything else (e.g. a forged
+    // role=admin / hr_manager / financial_accountant) falls back to 'student'.
+    // Privileged/staff accounts must be created by an administrator.
+    include_once 'login_settings.php';
+    // Lecturers are created by an administrator, not by public signup.
+    $allowed_signup_roles = ['student'];
+    if (ALLOW_PUBLIC_LECTURER_SIGNUP) $allowed_signup_roles[] = 'lecturer';
+    $role = in_array($_POST['role'] ?? '', $allowed_signup_roles, true) ? $_POST['role'] : 'student';
     $selected_course_id = intval($_POST['career_path'] ?? 0);
 
     // Resolve the course title (career_path is now stored as the human-readable
@@ -47,11 +55,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         //    and auto-enroll them in the course they picked at signup so their
         //    units are immediately visible without a separate manual enrollment step.
         if ($role == 'student') {
-            $skills = ['General Aptitude', 'Core Theory', 'Practical Application'];
-            foreach ($skills as $skill) {
-                $conn->query("INSERT INTO student_mastery (student_id, skill_name, mastery_level) 
-                              VALUES ($user_id, '$skill', 0.00)");
-            }
+            // No mastery rows are created at signup: a new student has not been assessed yet,
+            // and 0% would wrongly make them look like they are failing. Mastery appears after their first quiz.
             if ($selected_course_id) {
                 $conn->query("INSERT IGNORE INTO enrollments (student_id, course_id)
                               VALUES ($user_id, $selected_course_id)");

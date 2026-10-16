@@ -1,3 +1,4 @@
+<?php include_once 'login_settings.php'; ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -40,7 +41,9 @@
                 <label class="text-[10px] font-black uppercase text-slate-500 tracking-widest mb-1 block">Role</label>
                 <select name="role" required class="w-full p-3 bg-slate-100 rounded-xl text-sm font-bold text-slate-700 outline-none appearance-none cursor-pointer">
                     <option value="student">Student</option>
+                    <?php if (defined('ALLOW_PUBLIC_LECTURER_SIGNUP') && ALLOW_PUBLIC_LECTURER_SIGNUP): ?>
                     <option value="lecturer">Lecturer</option>
+                    <?php endif; ?>
                 </select>
             </div>
 

@@ -33,6 +33,14 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit();
 }
 
+// SECURITY: this legacy endpoint accepts a score from the browser. Students must submit
+// through Student_quiz.php, which grades the answers on the server — otherwise anyone could
+// POST score=100 and fake their results (and therefore their mastery).
+if (($_SESSION['role'] ?? '') === 'student') {
+    header("Location: student_dashboard.php?status=error&msg=" . urlencode("Please submit quizzes from the quiz page."));
+    exit();
+}
+
 // ── Sanitise inputs ────────────────────────────────────────────────
 $student_id = intval($_SESSION['user_id']);
 $quiz_id    = intval($_POST['quiz_id']   ?? 0);
@@ -52,23 +60,11 @@ if (!$student) {
 $career_path  = $student['career_path']  ?? 'General Software Engineering';
 $student_email = $student['email'];
 
-// ── Load all mastery levels for this student ───────────────────────
-$mastery_res = mysqli_query($conn,
-    "SELECT skill_name, mastery_level FROM student_mastery WHERE student_id = $student_id"
-);
-$all_mastery = [];
-while ($m = mysqli_fetch_assoc($mastery_res)) {
-    $all_mastery[$m['skill_name']] = floatval($m['mastery_level']);
-}
-
-// If the skill doesn't exist yet, seed it at 0
-if (!isset($all_mastery[$skill_name])) {
-    mysqli_query($conn,
-        "INSERT IGNORE INTO student_mastery (student_id, skill_name, mastery_level)
-         VALUES ($student_id, '$skill_name', 0.00)"
-    );
-    $all_mastery[$skill_name] = 0.0;
-}
+// ── Mastery BEFORE this attempt, from the student's real quiz scores ──
+//    (no more zero-seeding: a skill the student has never been quizzed on
+//     simply isn't in the list yet — "not assessed" is not "0%")
+include_once 'mastery_engine.php';
+$all_mastery = me_skill_map(me_compute_student($conn, $student_id));
 
 // ── Count previous attempts on this quiz ──────────────────────────
 $attempt_res = mysqli_fetch_assoc(mysqli_query($conn,
@@ -89,13 +85,7 @@ $decision = runAdaptiveEngine(
     $conn
 );
 
-// ── 1. Update mastery level ────────────────────────────────────────
-$new_mastery_escaped = floatval($decision['new_mastery']);
-mysqli_query($conn,
-    "UPDATE student_mastery
-     SET mastery_level = $new_mastery_escaped, last_updated = NOW()
-     WHERE student_id = $student_id AND skill_name = '$skill_name'"
-);
+// ── 1. (Mastery is refreshed from the real scores right after the result is saved, below) ──
 
 // ── 2. Record the result in results table ─────────────────────────
 $feedback_escaped = mysqli_real_escape_string($conn, $decision['feedback']);
@@ -124,6 +114,9 @@ mysqli_query($conn,
         '$action_str', '$band_str', '$grade_str', '$diff_str', $attempt_no, NOW())"
 );
 $result_id = mysqli_insert_id($conn);
+
+// Refresh the stored mastery so every dashboard shows the same numbers.
+me_sync_student($conn, $student_id);
 
 // ── 3. Log notification for the student ───────────────────────────
 $notif_msg = mysqli_real_escape_string($conn, $decision['notification_msg']);

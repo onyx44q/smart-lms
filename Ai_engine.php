@@ -66,6 +66,8 @@ $CAREER_SKILL_MAP = [
     ],
 ];
 
+include_once __DIR__ . '/mastery_engine.php';   // single definition of mastery (real quiz scores)
+
 // ─────────────────────────────────────────────────────────────────────
 //  MAIN ENGINE FUNCTION
 //  Call this after a student submits a quiz.
@@ -121,15 +123,17 @@ function runAdaptiveEngine(
         $delta       = AI_MASTERY_REMEDIAL;
     }
 
-    // ── RULE 2: Apply mastery change with floor/ceiling ────────────
-    $new_mastery = $current_mastery + $delta;
-    $new_mastery = max(AI_MASTERY_FLOOR, min(AI_MASTERY_CAP, $new_mastery));
+    // ── RULE 2: Mastery AFTER this quiz, from the real scores ──────
+    //   (previous model added a fixed +8.5/+3.2/-5 to a running total, so a
+    //    perfect quiz showed as 8.5%. Mastery is now the average of the
+    //    student's latest score on each quiz in the skill — see mastery_engine.php)
+    $projection    = me_compute_student($conn, $student_id, null, ['quiz_id' => $quiz_id, 'score' => $raw_score]);
+    $all_mastery   = me_skill_map($projection);                 // state after this attempt
+    $new_mastery   = floatval($all_mastery[$skill_name] ?? $raw_score);
     $mastery_delta = $new_mastery - $current_mastery;
 
-    // ── RULE 3: Performance band ───────────────────────────────────
-    $avg_mastery = count($all_mastery) > 0
-        ? array_sum($all_mastery) / count($all_mastery)
-        : 0;
+    // ── RULE 3: Performance band (average across assessed skills) ──
+    $avg_mastery = $projection['avg'] ?? $raw_score;
 
     if ($avg_mastery >= 75) {
         $performance_band = 'excellent';
@@ -160,7 +164,8 @@ function runAdaptiveEngine(
 
     $skill_gaps = [];
     foreach ($required_skills as $skill => $target) {
-        $current = floatval($all_mastery[$skill] ?? 0);
+        if (!isset($all_mastery[$skill])) continue;       // not assessed yet ≠ a gap of 0%
+        $current = floatval($all_mastery[$skill]);
         if ($current < $target) {
             $gap = $target - $current;
             $skill_gaps[] = [
@@ -340,42 +345,16 @@ function getLecturerDecisionData(int $lecturer_id, $conn): array
 
     $student_ids_str = implode(',', array_keys($all_students));
 
-    // ── Compute per-student mastery by replaying RESULTS through AI engine rules ──
-    // This bypasses duplicate rows in student_mastery and correctly accumulates
-    // across multiple quizzes on different topics.
-    $results_res = mysqli_query($conn,
-        "SELECT r.student_id, r.score, r.attempt_no,
-                q.id AS quiz_id, q.skill_name, q.title AS quiz_title, q.course_id
-         FROM results r
-         JOIN quizzes q ON q.id = r.quiz_id
-         WHERE r.student_id IN ($student_ids_str) AND q.course_id IN ($ids_str)
-         ORDER BY r.student_id ASC, r.created_at ASC, r.id ASC"
-    );
-    $student_mastery = [];
-    // Course-scoped mirror of the same data — needed so the per-course
-    // "Course Health" cards only ever reflect activity that actually
-    // happened IN THAT COURSE. Without this, a single quiz taken in one
-    // course bled its mastery score into every other course card the
-    // lecturer teaches (e.g. a course with zero enrolments' worth of
-    // activity would still show a quiz average, borrowed from a
-    // completely different course).
-    $student_mastery_by_course = [];
-    while ($row = mysqli_fetch_assoc($results_res)) {
-        $sid   = intval($row['student_id']);
-        $cid   = intval($row['course_id']);
-        $skill = !empty($row['skill_name']) ? $row['skill_name'] : _lect_infer_skill($row);
-        $cur   = $student_mastery[$sid][$skill] ?? 0.0;
-        $score = floatval($row['score']);
-        $att   = max(1, intval($row['attempt_no'] ?? 1));
-        if ($score >= AI_SCORE_ADVANCE)                                $delta = AI_MASTERY_ADVANCE;
-        elseif ($score >= AI_SCORE_RETRY && $att < AI_MAX_RETRIES)    $delta = AI_MASTERY_RETRY;
-        else                                                           $delta = AI_MASTERY_REMEDIAL;
-        $newMastery = max(AI_MASTERY_FLOOR, min(AI_MASTERY_CAP, $cur + $delta));
-        $student_mastery[$sid][$skill] = $newMastery;
-
-        $curByCourse = $student_mastery_by_course[$sid][$cid][$skill] ?? 0.0;
-        $student_mastery_by_course[$sid][$cid][$skill] =
-            max(AI_MASTERY_FLOOR, min(AI_MASTERY_CAP, $curByCourse + $delta));
+    // ── Per-student mastery from the students' REAL quiz scores ──────────
+    //   (mastery_engine.php: latest attempt per quiz, averaged per skill.)
+    //   $student_mastery           : sid => [skill => mastery]            (this lecturer's courses)
+    //   $student_mastery_by_course : sid => [course => [skill => mastery]] (Course Health cards)
+    //   $student_quiz_count        : sid => distinct quizzes taken        (evidence for flags)
+    $student_mastery = []; $student_mastery_by_course = []; $student_quiz_count = [];
+    foreach (me_compute_bulk($conn, array_keys($all_students), $course_ids) as $sid => $m) {
+        $student_mastery[$sid]    = me_skill_map($m['all']);
+        $student_quiz_count[$sid] = $m['all']['quizzes'];
+        foreach ($m['by_course'] as $cid => $cm) $student_mastery_by_course[$sid][$cid] = me_skill_map($cm);
     }
 
     // ── Fetch final exam / coursework marks from legacy student_marks table ──
@@ -470,6 +449,7 @@ function getLecturerDecisionData(int $lecturer_id, $conn): array
 
         if ($combined < 40) {
             $at_risk_students[] = [
+                'student_id'     => $sid,
                 'name'           => $student['full_name'],
                 'career'         => $student['career_path'] ?? '',
                 'avg_mastery'    => $quiz_avg !== null ? round($quiz_avg, 1) : 0,
@@ -478,8 +458,11 @@ function getLecturerDecisionData(int $lecturer_id, $conn): array
                 'has_exam'       => $exam_pct !== null,
             ];
         }
-        if ($combined >= 70) {
+        // Top performer needs EVIDENCE: an exam mark, or at least 2 different quizzes
+        // (one lucky quiz shouldn't crown anyone; early warnings for struggling students are still raised from 1 quiz).
+        if ($combined >= 70 && ($exam_pct !== null || ($student_quiz_count[$sid] ?? 0) >= 2)) {
             $top_students[] = [
+                'student_id'     => $sid,
                 'name'           => $student['full_name'],
                 'career'         => $student['career_path'] ?? '',
                 'avg_mastery'    => $quiz_avg !== null ? round($quiz_avg, 1) : 0,
@@ -604,7 +587,7 @@ function getRuleConfiguration(): array
 // ─────────────────────────────────────────────────────────────────────
 function getRiskDashboardData($conn, ?array $course_ids = null): array
 {
-    $empty = ['distribution' => ['excellent' => 0, 'good' => 0, 'at_risk' => 0, 'critical' => 0], 'students' => []];
+    $empty = ['distribution' => ['excellent' => 0, 'good' => 0, 'at_risk' => 0, 'critical' => 0], 'students' => [], 'no_data' => 0];
 
     $course_filter = '';
     if ($course_ids !== null) {
@@ -626,13 +609,11 @@ function getRiskDashboardData($conn, ?array $course_ids = null): array
 
     $ids_str = implode(',', array_keys($students));
 
-    // Quiz mastery average per student
-    $mastery_res = mysqli_query($conn,
-        "SELECT student_id, AVG(mastery_level) AS avg_m FROM student_mastery
-         WHERE student_id IN ($ids_str) GROUP BY student_id"
-    );
+    // Quiz mastery average per student — from their real quiz scores in these courses
     $quiz_avg = [];
-    while ($r = mysqli_fetch_assoc($mastery_res)) $quiz_avg[intval($r['student_id'])] = round(floatval($r['avg_m']), 1);
+    foreach (me_compute_bulk($conn, array_keys($students), $course_ids) as $sid => $m) {
+        if ($m['all']['avg'] !== null) $quiz_avg[$sid] = round($m['all']['avg'], 1);
+    }
 
     // Attendance % per student (across all their units)
     $att_res = mysqli_query($conn,
@@ -652,6 +633,8 @@ function getRiskDashboardData($conn, ?array $course_ids = null): array
          JOIN assignments a ON a.course_id = e.course_id
          LEFT JOIN assignment_submissions s ON s.assignment_id = a.id AND s.student_id = e.student_id
          WHERE e.student_id IN ($ids_str) $course_filter
+           -- only submitted work, or work that was due AFTER the student enrolled and has now passed, counts
+           AND (s.id IS NOT NULL OR (a.due_date IS NOT NULL AND a.due_date < CURDATE() AND a.due_date >= DATE(e.enroll_date)))
          GROUP BY e.student_id"
     );
     $assignment_pct = [];
@@ -661,15 +644,16 @@ function getRiskDashboardData($conn, ?array $course_ids = null): array
     }
 
     $distribution = ['excellent' => 0, 'good' => 0, 'at_risk' => 0, 'critical' => 0];
-    $rows = [];
+    $rows = []; $noData = 0;
     foreach ($students as $sid => $s) {
-        $qa = $quiz_avg[$sid] ?? 0.0;
+        $qa = $quiz_avg[$sid] ?? null;
         $at = $attendance[$sid] ?? null;
         $ap = $assignment_pct[$sid] ?? null;
 
-        $parts = [$qa];
-        if ($at !== null) $parts[] = $at;
-        if ($ap !== null) $parts[] = $ap;
+        // Only measures the student actually has. A new student with no quiz, no
+        // attendance record and nothing due yet is "not assessed" — not "critical".
+        $parts = array_values(array_filter([$qa, $at, $ap], fn($v) => $v !== null));
+        if (empty($parts)) { $noData++; continue; }
         $composite = round(array_sum($parts) / count($parts), 1);
 
         if ($composite >= 75)      $band = 'excellent';
@@ -692,7 +676,60 @@ function getRiskDashboardData($conn, ?array $course_ids = null): array
     }
     usort($rows, fn($a, $b) => $a['composite'] <=> $b['composite']);
 
-    return ['distribution' => $distribution, 'students' => $rows];
+    return ['distribution' => $distribution, 'students' => $rows, 'no_data' => $noData];
+}
+
+// ─────────────────────────────────────────────────────────────────────
+//  RISK VIEW THAT AGREES WITH THE AI DECISION DASHBOARD
+//  getRiskDashboardData() scores quiz mastery + attendance + assignments,
+//  while the lecturer's AI Decision Dashboard flags students whose combined
+//  quiz+exam score is below 40%. A student could be flagged by one and not
+//  the other, so the dashboard card, the Risk Dashboard page and the
+//  chatbot used to give different answers. This merges them: anyone the
+//  decision engine flags is shown as at least "At Risk" (HIGH if critical).
+//  $lecturer_ids = null → check every lecturer (admin / institution view).
+// ─────────────────────────────────────────────────────────────────────
+function getRiskViewWithEngineFlags($conn, ?array $course_ids = null, ?array $lecturer_ids = null): array
+{
+    $data = getRiskDashboardData($conn, $course_ids);
+    if (empty($data['students'])) return $data;
+
+    if ($lecturer_ids === null) {
+        $lecturer_ids = [];
+        $lr = mysqli_query($conn, "SELECT id FROM users WHERE role = 'lecturer'");
+        while ($lr && ($row = mysqli_fetch_assoc($lr))) $lecturer_ids[] = intval($row['id']);
+    }
+
+    $flagged = [];   // student_id => engine row (lowest combined score wins)
+    foreach (array_unique(array_map('intval', $lecturer_ids)) as $lid) {
+        $dd = getLecturerDecisionData($lid, $conn);
+        foreach ($dd['at_risk_students'] ?? [] as $f) {
+            if (!isset($f['student_id'])) continue;
+            $sid = intval($f['student_id']);
+            if (!isset($flagged[$sid]) || $f['combined_score'] < $flagged[$sid]['combined_score']) $flagged[$sid] = $f;
+        }
+    }
+
+    foreach ($data['students'] as &$s) {
+        $s['engine_flag']  = false;
+        $s['engine_score'] = null;
+        $f = $flagged[intval($s['student_id'])] ?? null;
+        if (!$f) continue;
+        $s['engine_flag']  = true;
+        $s['engine_score'] = $f['combined_score'];
+        $worse = ($f['risk_level'] ?? '') === 'critical' ? 'critical' : 'at_risk';
+        if (in_array($s['band'], ['excellent', 'good'], true) || ($worse === 'critical' && $s['band'] === 'at_risk')) {
+            $s['band'] = $worse;
+            $s['risk'] = $worse === 'critical' ? 'HIGH' : 'MEDIUM';
+        }
+    }
+    unset($s);
+
+    $dist = ['excellent' => 0, 'good' => 0, 'at_risk' => 0, 'critical' => 0];
+    foreach ($data['students'] as $s) $dist[$s['band']]++;
+    $data['distribution'] = $dist;
+    usort($data['students'], fn($a, $b) => $a['composite'] <=> $b['composite']);
+    return $data;
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -760,18 +797,3 @@ function sendLmsEmail(string $to, string $subject, string $body): bool
     // The @ suppresses the warning if the connection still fails
     return @mail($to, $subject, $body, $headers);
 }
-?>
-
-
-
-
-
-
-
-?>
-
-
-
-
-
-

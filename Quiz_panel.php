@@ -682,7 +682,7 @@ $lecturerName = $_SESSION['user_name'] ?? 'Lecturer';
                 sourceMsg = `<span class="text-blue-400"><i class="fa-solid fa-brain mr-1"></i>Generated from general AI knowledge</span>`;
             } else {
                 const reason = json.ai_error ? ` — ${escHtml(json.ai_error)}` : '';
-                sourceMsg = `<span class="text-amber-400"><i class="fa-solid fa-triangle-exclamation mr-1"></i>AI generation failed, used basic template questions instead${reason}</span>`;
+                sourceMsg = `<span class="text-amber-400"><i class="fa-solid fa-gear mr-1"></i>AI was unavailable${reason} — questions were built directly from your notes by the built-in engine</span>`;
             }
 
             closeGenerateModal();

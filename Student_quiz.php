@@ -108,14 +108,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['answers'])) {
         ? (int)round(($correct_count / $total_questions) * 100)
         : 0;
 
-    // Load student mastery for ai_engine
-    $mastery_res = mysqli_query($conn,
-        "SELECT skill_name, mastery_level FROM student_mastery WHERE student_id = $student_id"
-    );
-    $all_mastery = [];
-    while ($m = mysqli_fetch_assoc($mastery_res)) {
-        $all_mastery[$m['skill_name']] = floatval($m['mastery_level']);
-    }
+    // Mastery BEFORE this attempt, from the student's real quiz scores (mastery_engine.php)
+    include_once 'mastery_engine.php';
+    $all_mastery = me_skill_map(me_compute_student($conn, $student_id));
 
     $student_row  = mysqli_fetch_assoc(mysqli_query($conn,
         "SELECT full_name, email, career_path FROM users WHERE id = $student_id"
@@ -139,27 +134,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['answers'])) {
         }
     }
 
-    // Ensure skill exists
-    if (!isset($all_mastery[$skill_name])) {
-        mysqli_query($conn,
-            "INSERT IGNORE INTO student_mastery (student_id, skill_name, mastery_level)
-             VALUES ($student_id, '" . mysqli_real_escape_string($conn, $skill_name) . "', 0.00)"
-        );
-        $all_mastery[$skill_name] = 0.0;
-    }
-
     // ── Run AI engine ─────────────────────────────────────────────────
     $decision = runAdaptiveEngine(
         $student_id, $quiz_id, $skill_name,
         $raw_score, $attempt_no, $career_path, $all_mastery, $conn
     );
 
-    // ── Update mastery ────────────────────────────────────────────────
-    $new_m = floatval($decision['new_mastery']);
-    mysqli_query($conn,
-        "UPDATE student_mastery SET mastery_level = $new_m, last_updated = NOW()
-         WHERE student_id = $student_id AND skill_name = '" . mysqli_real_escape_string($conn, $skill_name) . "'"
-    );
+    // (Mastery is refreshed from the real scores right after the result is saved, below.)
 
     // ── Save result ───────────────────────────────────────────────────
     $feedback_esc = mysqli_real_escape_string($conn, $decision['feedback']);
@@ -177,6 +158,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['answers'])) {
             '$band_esc', '$grade_esc', '$diff_esc2', $attempt_no, NOW())"
     );
     $result_id = intval(mysqli_insert_id($conn));
+
+    // Refresh stored mastery so every dashboard shows the same, score-based numbers.
+    me_sync_student($conn, $student_id);
 
     // ── Save per-question answers ─────────────────────────────────────
     foreach ($answer_review as $ar) {

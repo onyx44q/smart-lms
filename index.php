@@ -1,5 +1,6 @@
 <?php
 // index.php — SmartLMS Login Page with Mixed Video + Image Background
+include_once 'login_settings.php';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -375,6 +376,8 @@
             </div>
 
             <form action="process_login.php" method="POST" class="space-y-4">
+                <?php /* Role dropdown kept but hidden by default (see login_settings.php): the server reads the role from the account itself. */ ?>
+                <?php if (LOGIN_SHOW_ROLE_SELECTOR): ?>
                 <div>
                     <label class="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5 block">Role</label>
                     <div class="relative">
@@ -389,6 +392,7 @@
                         </select>
                     </div>
                 </div>
+                <?php endif; ?>
 
                 <div>
                     <label class="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1.5 block">Email or Admission No.</label>

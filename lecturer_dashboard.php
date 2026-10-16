@@ -8,6 +8,7 @@ if (session_status() === PHP_SESSION_NONE) {
 
 checkRole('lecturer');
 
+
 // ── Handle material deletion from the course-detail view ──────────────────
 if (isset($_GET['delete_mat'])) {
     $mat_id = intval($_GET['delete_mat']);
@@ -269,6 +270,11 @@ $avgMastery = $decisionData['class_avg'] ?? 0; // combined quiz+exam avg from de
             <a href="?view=students" class="flex items-center space-x-4 p-3 rounded-xl <?php echo (($_GET['view'] ?? '') === 'students') ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' : 'text-slate-400 hover:bg-slate-800'; ?> transition group w-full">
                 <i class="fa-solid fa-users text-lg flex-shrink-0 group-hover:text-white"></i>
                 <span class="font-medium hidden lg:block group-hover:text-white truncate">My Students</span>
+            </a>
+
+            <a href="lecturer_profile.php" class="flex items-center space-x-4 p-3 rounded-xl text-slate-400 hover:bg-slate-800 transition group w-full">
+                <i class="fa-solid fa-id-card text-lg flex-shrink-0 group-hover:text-white"></i>
+                <span class="font-medium hidden lg:block group-hover:text-white truncate">My Profile</span>
             </a>
 
             <div class="w-full">
@@ -2334,7 +2340,7 @@ $avgMastery = $decisionData['class_avg'] ?? 0; // combined quiz+exam avg from de
                 </div>
                 <div>
                     <p class="text-white font-black text-sm">SmartLMS Assistant</p>
-                    <p class="text-indigo-200 text-[10px] uppercase tracking-widest">Lecturer AI · Always Online</p>
+                    <p class="text-indigo-200 text-[10px] uppercase tracking-widest">Lecturer AI · Live data</p>
                 </div>
             </div>
             <button onclick="toggleChat()" class="text-white/70 hover:text-white transition">
@@ -2370,6 +2376,14 @@ $avgMastery = $decisionData['class_avg'] ?? 0; // combined quiz+exam avg from de
         if (chatOpen) document.getElementById('chat-input').focus();
     }
     function sendChip(text) { document.getElementById('chat-input').value = text; sendMessage(); }
+    function chatChips(chips) {
+        document.querySelectorAll('.dyn-chips').forEach(el => el.remove());
+        if (!chips.length) return;
+        const wrap = document.createElement('div');
+        wrap.className = 'quick-chips dyn-chips'; wrap.style.padding = '0';
+        chips.forEach(c => { const sp = document.createElement('span'); sp.className = 'chip'; sp.textContent = c; sp.onclick = () => sendChip(c); wrap.appendChild(sp); });
+        document.getElementById('chat-messages').appendChild(wrap); scrollChat();
+    }
     async function sendMessage() {
         const input = document.getElementById('chat-input');
         const msg   = input.value.trim();
@@ -2377,6 +2391,7 @@ $avgMastery = $decisionData['class_avg'] ?? 0; // combined quiz+exam avg from de
         input.value = '';
         appendChatMsg(msg, 'user');
         document.getElementById('quick-chips').style.display = 'none';
+        document.querySelectorAll('.dyn-chips').forEach(el => el.remove());
         const typing = document.createElement('div');
         typing.className = 'chat-typing'; typing.id = 'typing-ind';
         typing.innerHTML = '<span></span><span></span><span></span>';
@@ -2388,6 +2403,7 @@ $avgMastery = $decisionData['class_avg'] ?? 0; // combined quiz+exam avg from de
             const data = await res.json();
             document.getElementById('typing-ind')?.remove();
             appendChatMsg(data.reply || 'Sorry, I could not process that.', 'bot');
+            chatChips(data.chips || []);
         } catch(e) {
             document.getElementById('typing-ind')?.remove();
             appendChatMsg('Connection error. Please try again.', 'bot');

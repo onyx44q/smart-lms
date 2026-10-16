@@ -12,7 +12,7 @@ $courseCount = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) as total 
 include_once __DIR__ . '/recalculate_mastery.php';
 $all_result_students = mysqli_query($conn, "SELECT DISTINCT student_id FROM results");
 while ($rs = mysqli_fetch_assoc($all_result_students)) {
-    recalculate_mastery_for_student(intval($rs['student_id']), $conn);
+    if (mastery_needs_recalculation(intval($rs['student_id']), $conn)) recalculate_mastery_for_student(intval($rs['student_id']), $conn);
 }
 
 // Performance Metrics — computed as per-student AVERAGE mastery (accurate)
@@ -598,6 +598,10 @@ $filter = $_GET['filter'] ?? 'all';
             'adm_cleared' => ['🗑 Admission number cleared.', 'bg-slate-50 border-slate-200 text-slate-700'],
             'adm_taken'   => ['❌ That admission number is already assigned to another student.', 'bg-red-50 border-red-200 text-red-700'],
             'added'       => ['✅ User added successfully.', 'bg-emerald-50 border-emerald-200 text-emerald-800'],
+            'lect_added'  => ['✅ Lecturer account created. Give them the temporary password — they will be asked to change it when they first log in.', 'bg-emerald-50 border-emerald-200 text-emerald-800'],
+            'email_taken' => ['❌ An account with that email already exists.', 'bg-red-50 border-red-200 text-red-700'],
+            'lect_weakpwd'=> ['❌ The temporary password must be at least 8 characters.', 'bg-red-50 border-red-200 text-red-700'],
+            'lect_invalid'=> ['❌ Please enter the lecturer\'s full name and a valid email address.', 'bg-red-50 border-red-200 text-red-700'],
             'deleted'     => ['🗑 User deleted.', 'bg-slate-50 border-slate-200 text-slate-700'],
             'error'       => ['❌ Something went wrong. Please try again.', 'bg-red-50 border-red-200 text-red-700'],
         ];
@@ -2247,7 +2251,11 @@ $filter = $_GET['filter'] ?? 'all';
                     while($c = mysqli_fetch_assoc($clist)) echo "<option value='{$c['id']}'>{$c['title']}</option>";
                     ?>
                 </select>
-                <input type="password" name="password" placeholder="Temporary Password" required class="w-full p-4 bg-slate-50 rounded-2xl border-none outline-none focus:ring-2 focus:ring-blue-500 font-medium">
+                <div class="relative">
+                    <input type="text" name="password" id="lect-temp-pwd" placeholder="Temporary Password (min 8 characters)" required minlength="8" autocomplete="off" class="w-full p-4 pr-28 bg-slate-50 rounded-2xl border-none outline-none focus:ring-2 focus:ring-blue-500 font-medium">
+                    <button type="button" onclick="genLecturerPwd()" class="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black uppercase tracking-widest text-blue-600 hover:text-blue-800">Generate</button>
+                </div>
+                <p class="text-[11px] text-slate-400 leading-snug -mt-1"><i class="fa-solid fa-circle-info mr-1"></i>Share this password with the lecturer. They must change it the first time they log in.</p>
                 <div class="flex space-x-3 pt-4">
                     <button type="button" onclick="toggleModal('lecturerModal')" class="flex-1 bg-slate-100 text-slate-500 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest">Cancel</button>
                     <button type="submit" class="flex-1 bg-blue-600 text-white py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-lg shadow-blue-600/20">Create Account</button>
@@ -2271,6 +2279,11 @@ $filter = $_GET['filter'] ?? 'all';
     </div>
 
     <script>
+        function genLecturerPwd() {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+            const buf = new Uint32Array(12); crypto.getRandomValues(buf);
+            document.getElementById('lect-temp-pwd').value = Array.from(buf, n => chars[n % chars.length]).join('');
+        }
         function toggleModal(id) {
             const modal = document.getElementById(id);
             modal.style.display = (modal.style.display === "none") ? "flex" : "none";
@@ -2302,5 +2315,6 @@ $filter = $_GET['filter'] ?? 'all';
             });
         }
     </script>
+<?php include 'chat_widget.php'; ?>
 </body>
 </html>

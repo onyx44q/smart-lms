@@ -30,7 +30,9 @@ if ($role === 'lecturer') {
     while ($r = mysqli_fetch_assoc($courses_res)) $course_ids[] = intval($r['id']);
 }
 
-$data         = getRiskDashboardData($conn, $course_ids);
+// Merged view: also counts students flagged by the AI Decision Dashboard
+// (combined quiz+exam < 40%), so this page agrees with that card.
+$data         = getRiskViewWithEngineFlags($conn, $course_ids, $role === 'lecturer' ? [$lecturer_id] : null);
 $distribution = $data['distribution'];
 $students     = $data['students'];
 $atRiskOnly   = array_values(array_filter($students, fn($s) => in_array($s['band'], ['at_risk', 'critical'])));
@@ -128,7 +130,7 @@ function pctCell($v) {
         <td><?php echo pctCell($s['attendance']); ?></td>
         <td><?php echo pctCell($s['quiz_avg']); ?></td>
         <td><?php echo pctCell($s['assignment']); ?></td>
-        <td><span class="risk-badge risk-<?php echo $s['risk']; ?>"><?php echo $s['risk']; ?></span></td>
+        <td><span class="risk-badge risk-<?php echo $s['risk']; ?>"><?php echo $s['risk']; ?></span><?php if (!empty($s['engine_flag'])): ?><div style="color:#94a3b8;font-size:9px;margin-top:3px;">AI flag: quiz+exam <?php echo $s['engine_score']; ?>%</div><?php endif; ?></td>
       </tr>
       <?php endforeach; ?>
     </tbody>
